@@ -450,45 +450,41 @@ class ChatBot(PageBase):
                 unsafe_allow_html=True,
             )
 
-        # 3. Example Query Chips
+        # 3. Example Query Chips — clickable buttons that send through chat
         with st.expander("Suggested Queries", expanded=False):
             st.caption("**OpEx Financial Analytics**")
             opex_queries = [
-                ("\U0001F4B0", "Total Spend", "What is the total spend across all cost centers in the latest quarter?"),
-                ("\U0001F4CA", "Project Breakdown", "Show me a detailed budget breakdown for the top 5 projects by spend."),
-                ("\U0001F465", "Department Leads", "List all unique department leads with their total managed budget."),
-                ("\U0001F4C8", "Trend Analysis", "Compare HW vs SW spending trends across the last 4 quarters."),
-                ("\U0001F30D", "Geo Analysis", "What is the resource spend split by country?"),
-                ("\U0001F6A8", "Variance Report", "Show budget vs actual variance for the current fiscal year."),
+                ("Total Spend by Quarter", "What is the total spend (ods_mm) for each fiscal quarter?"),
+                ("Top 5 Projects", "Show me the top 5 projects by total spend."),
+                ("Department Leads", "List all unique department leads with their total managed spend."),
+                ("HW vs SW Spend", "Compare total HW vs SW spending across all fiscal years."),
+                ("Spend by Country", "What is the total spend split by country (home_dept_region_r1)?"),
+                ("Budget vs Actual", "Show budget (tm1_mm) vs actual spend (ods_mm) by project."),
             ]
-            chips_html = ""
-            for icon, title, prompt in opex_queries:
-                chips_html += (
-                    f'<span class="query-chip">'
-                    f'<span class="chip-icon">{icon}</span>'
-                    f'<strong>{title}:</strong> {prompt}'
-                    f'</span>'
-                )
-            st.markdown(chips_html, unsafe_allow_html=True)
+            cols = st.columns(3)
+            for i, (title, query) in enumerate(opex_queries):
+                with cols[i % 3]:
+                    if st.button(f"\U0001F4B0 {title}", key=f"sq_opex_{i}", use_container_width=True):
+                        st.session_state.chat_history_chat.append(("You", query))
+                        st.session_state.chat_history_chat.append(("Assistant", self.PLACEHOLDER))
+                        st.rerun()
 
             st.caption("**Resource Planner & Demand**")
             rp_queries = [
-                ("\U0001F4CB", "Headcount Demand", "What is the total headcount demand by project for the current month?"),
-                ("\U0001F3E2", "Team Capacity", "Show me the FTE allocation for each homegroup across all projects."),
-                ("\U0001F30E", "Country Staffing", "What is the resource demand split by country?"),
-                ("\U0001F3AF", "Priority Ranking", "List all projects ranked by priority with their target capacity."),
-                ("\U0001F4B5", "Country Cost", "What is the cost per resource by country for the top 5 projects?"),
-                ("\U0001F4C5", "Monthly Trend", "Show me the monthly demand trend for the last 6 months by project."),
+                ("Demand by Project", "What is the total demand value by project name?"),
+                ("Demand by Country", "Show the total resource demand value split by country."),
+                ("FTE by Homegroup", "What is the total FTE allocation for each homegroup?"),
+                ("Project Priority", "List all projects ranked by priority with their target capacity."),
+                ("Cost by Country", "What is the cost per resource (country_cost) by country?"),
+                ("Monthly Demand", "Show the total demand value by month across all projects."),
             ]
-            chips_html = ""
-            for icon, title, prompt in rp_queries:
-                chips_html += (
-                    f'<span class="query-chip">'
-                    f'<span class="chip-icon">{icon}</span>'
-                    f'<strong>{title}:</strong> {prompt}'
-                    f'</span>'
-                )
-            st.markdown(chips_html, unsafe_allow_html=True)
+            cols = st.columns(3)
+            for i, (title, query) in enumerate(rp_queries):
+                with cols[i % 3]:
+                    if st.button(f"\U0001F4CB {title}", key=f"sq_rp_{i}", use_container_width=True):
+                        st.session_state.chat_history_chat.append(("You", query))
+                        st.session_state.chat_history_chat.append(("Assistant", self.PLACEHOLDER))
+                        st.rerun()
 
         # 4. History Initialization
         if "chat_history_chat" not in st.session_state:

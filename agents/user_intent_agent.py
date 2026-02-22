@@ -98,23 +98,70 @@ class UserIntentAgent:
         try:
             response_text = self.utils.llm_call(full_prompt)
             cleaned_response = response_text.replace("```json", "").replace("```", "").strip()
-            
+
             start_idx = cleaned_response.find('{')
             end_idx = cleaned_response.rfind('}')
             if start_idx != -1 and end_idx != -1:
                 json_str = cleaned_response[start_idx:end_idx+1]
                 data = json.loads(json_str)
+                if not data or "intent" not in data:
+                    raise ValueError("LLM returned empty or invalid JSON (possible API error)")
                 return IntentResponse(**data)
             else:
-                raise ValueError("No JSON found")
+                raise ValueError("No JSON found in LLM response")
 
         except Exception as e:
-            logger.error(f"Intent classification failed: {e}")
+            logger.warning(f"Intent classification fell back to keyword routing: {e}")
+            return self._keyword_fallback(user_query)
+
+    def _keyword_fallback(self, user_query: str) -> IntentResponse:
+        """
+        Rule-based intent classification when the LLM is unavailable.
+        Uses keyword matching to route the query to the correct agent.
+        """
+        q = user_query.lower()
+
+        # SQL/data keywords
+        sql_keywords = [
+            "spend", "budget", "cost", "total", "sum", "average", "count",
+            "how much", "how many", "list", "show me", "top", "bottom",
+            "compare", "breakdown", "by country", "by project", "by department",
+            "headcount", "demand", "fte", "allocation", "capacity", "staffing",
+            "priority", "ranking", "trend", "quarterly", "fiscal", "variance",
+            "opex", "resource", "department", "manager", "lead", "region",
+        ]
+
+        # Semantic/RAG keywords
+        rag_keywords = [
+            "explain", "summarize", "what is", "what are", "policy",
+            "meaning", "define", "how to", "why", "describe", "overview",
+            "documentation", "guide", "process",
+        ]
+
+        sql_score = sum(1 for kw in sql_keywords if kw in q)
+        rag_score = sum(1 for kw in rag_keywords if kw in q)
+
+        if sql_score >= 2 or (sql_score >= 1 and rag_score == 0 and len(q.split()) > 3):
             return IntentResponse(
-                intent=IntentType.GENERAL_CHAT, 
-                confidence=0.0, 
-                reasoning=f"Error: {e}", 
-                suggested_agent="ChatBot"
+                intent=IntentType.DATA_SQL,
+                confidence=0.75,
+                reasoning="Keyword-based routing (LLM unavailable): data/SQL query detected",
+                suggested_agent="SqlAgent",
+                refined_query=user_query,
+            )
+        elif rag_score >= 1:
+            return IntentResponse(
+                intent=IntentType.SEMANTIC_RAG,
+                confidence=0.70,
+                reasoning="Keyword-based routing (LLM unavailable): semantic search detected",
+                suggested_agent="SemanticAgent",
+            )
+        else:
+            return IntentResponse(
+                intent=IntentType.GENERAL_CHAT,
+                confidence=0.80,
+                reasoning="Keyword-based routing (LLM unavailable): general chat",
+                suggested_agent="ChatBot",
             )
 
     def route_and_execute(self, user_query: str) -> str:
