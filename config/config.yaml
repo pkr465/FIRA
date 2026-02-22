@@ -1,10 +1,8 @@
 # =============================================================================
 # FIRA — Financial Intelligence & Resource Analytics — Configuration
 # =============================================================================
-# This is the main configuration file. All non-secret settings go here.
-# Secrets (API keys, passwords) go in .env — see env.example.
-#
-# Load order: config.yaml → .env (env vars override yaml values)
+# This is the main configuration file. All settings go here.
+# Only QGENIE_API_KEY needs to be set in .env — see env.example.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -79,19 +77,18 @@ Database:
 # -----------------------------------------------------------------------------
 # PostgreSQL / PGVector Settings
 # -----------------------------------------------------------------------------
-# Passwords should be set in .env (POSTGRES_ADMIN_PWD, POSTGRES_PWD).
-# The admin user (postgres) is used for bootstrap (CREATE DATABASE, extensions).
+# The admin user (postgres) is used by bootstrap_db.py and drop_db.py.
 # The app user (fira_user) is used at runtime for all queries.
 Postgres:
   host: "localhost"
   port: 5432
   database: "cnss_opex_db"
-  # --- Admin credentials (for bootstrap_db.py only) ---
+  # --- Admin credentials (bootstrap_db.py / drop_db.py) ---
   admin_username: "postgres"
-  # admin_password: loaded from .env → POSTGRES_ADMIN_PWD
-  # --- Application credentials (used by the app at runtime) ---
+  admin_password: "postgres"
+  # --- Application credentials (runtime) ---
   username: "fira_user"
-  # password: loaded from .env → POSTGRES_PWD
+  password: "fira_password"
   # --- Collection / Embedding tables ---
   collection: "cnss_opex_db"
   collection_tablename: "langchain_pg_collection"

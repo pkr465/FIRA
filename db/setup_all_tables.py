@@ -168,7 +168,11 @@ PRIORITY_INDEXES_SQL = [
 # ---------------------------------------------------------------------------
 
 def load_pg_config(config_path: str = "config/config.yaml") -> dict:
-    """Load Postgres connection params from config YAML + .env overrides."""
+    """Load Postgres ADMIN connection params from config.yaml.
+
+    Bootstrap tools (setup, drop) connect as the admin user to create/drop
+    objects and transfer ownership. All values come from config.yaml.
+    """
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config not found: {config_path}")
 
@@ -177,25 +181,12 @@ def load_pg_config(config_path: str = "config/config.yaml") -> dict:
 
     pg = cfg.get("Postgres", {})
 
-    # Allow .env overrides (same keys as Config dataclass)
-    from dotenv import load_dotenv, find_dotenv
-    for env_file in [".default.env", ".env"]:
-        env_path = find_dotenv(env_file)
-        if env_path:
-            load_dotenv(env_path, override=True)
-
-    host     = os.environ.get("POSTGRES_HOST",     pg.get("host", "localhost"))
-    port     = int(os.environ.get("POSTGRES_PORT",  pg.get("port", 5432)))
-    database = os.environ.get("POSTGRES_DB_NAME",   pg.get("database", "cnss_opex_db"))
-    user     = os.environ.get("POSTGRES_ADMIN_USER", pg.get("user") or pg.get("username", "postgres"))
-    password = os.environ.get("POSTGRES_ADMIN_PWD",  pg.get("password", "postgres"))
-
     return {
-        "host": host,
-        "port": port,
-        "database": database,
-        "user": user,
-        "password": password,
+        "host":     pg.get("host", "localhost"),
+        "port":     int(pg.get("port", 5432)),
+        "database": pg.get("database", "cnss_opex_db"),
+        "user":     pg.get("admin_username", "postgres"),
+        "password": pg.get("admin_password", "postgres"),
     }
 
 
@@ -266,9 +257,13 @@ class DatabaseBootstrap:
         """Create the application-level database user (fira_user) if it doesn't exist."""
         db_name = self.pg_config["database"]
 
-        # Determine app user credentials from .env / config
-        app_user = os.environ.get("POSTGRES_USER", "fira_user")
-        app_pwd = os.environ.get("POSTGRES_PWD", "fira_password")
+        # Read app user credentials from config.yaml
+        config_path = self.config_path
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+        pg = cfg.get("Postgres", {})
+        app_user = pg.get("username", "fira_user")
+        app_pwd = pg.get("password", "fira_password")
 
         logger.info(f"Checking application user '{app_user}'...")
         conn = self._connect_app()

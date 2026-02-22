@@ -40,43 +40,17 @@ class DatabaseSetupManager:
             raise
 
     def _get_connection_string(self) -> str:
+        """Build SQLAlchemy connection string from config.yaml (app user)."""
         try:
             pg_config = self.config.get('Postgres')
             if not pg_config:
                 raise KeyError("Could not find 'Postgres' section in config.")
 
-            # Load .env so POSTGRES_* env vars are available
-            try:
-                from dotenv import load_dotenv, find_dotenv
-                for env_file in [".default.env", ".env"]:
-                    env_path = find_dotenv(env_file)
-                    if env_path:
-                        load_dotenv(env_path, override=True)
-            except ImportError:
-                pass
-
-            # Resolve credentials: env vars → YAML keys (multiple naming conventions)
-            username = (
-                os.environ.get("POSTGRES_USER")
-                or pg_config.get('username')
-                or pg_config.get('user')
-                or "fira_user"
-            )
-            password = (
-                os.environ.get("POSTGRES_PWD")
-                or os.environ.get("POSTGRES_ADMIN_PWD")
-                or pg_config.get('password')
-                or pg_config.get('admin_password')
-                or "postgres"
-            )
-            host = os.environ.get("POSTGRES_HOST") or pg_config.get('host', 'localhost')
-            port = int(os.environ.get("POSTGRES_PORT", 0) or pg_config.get('port', 5432))
-            database = (
-                os.environ.get("POSTGRES_DB_NAME")
-                or pg_config.get('database')
-                or pg_config.get('dbname')
-                or "cnss_opex_db"
-            )
+            username = pg_config.get('username', 'fira_user')
+            password = pg_config.get('password', 'fira_password')
+            host     = pg_config.get('host', 'localhost')
+            port     = int(pg_config.get('port', 5432))
+            database = pg_config.get('database', 'cnss_opex_db')
 
             return f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
 

@@ -61,37 +61,32 @@ pip install qgenie-sdk[all] qgenie-sdk-tools \
 
 ### 5. Configure Environment
 
-The project uses two configuration layers:
-
-- **`config/config.yaml`** — All application settings (paths, models, endpoints, DB host/port, Streamlit port, agent tuning, etc.)
-- **`.env`** — Only secrets and credentials (API keys, database passwords)
-
-**Step A:** Copy the example env file and fill in your secrets:
+**Step A:** Copy the example env file and set your QGenie API key:
 
 ```bash
 cp env.example .env
 ```
 
-Open `.env` and set your credentials:
+Open `.env` and set your API key:
 
 ```env
-# LLM
 QGENIE_API_KEY=your-actual-api-key
-
-# PostgreSQL — Admin (used only by bootstrap_db.py)
-POSTGRES_ADMIN_USER=postgres
-POSTGRES_ADMIN_PWD=your_postgres_admin_password
-
-# PostgreSQL — Application user (used by the running app)
-POSTGRES_USER=fira_user
-POSTGRES_PWD=your_fira_password
 ```
 
-> **Important:** The admin credentials (`POSTGRES_ADMIN_*`) are only used during database bootstrap to create the database, enable extensions, and set up the application user. The application itself connects using the `POSTGRES_USER` / `POSTGRES_PWD` credentials at runtime.
+**Step B:** Review `config/config.yaml` — this is the single source of truth for all settings including PostgreSQL credentials. The Postgres section looks like this:
 
-**Step B:** Review `config/config.yaml` and adjust settings for your environment — database host/port, LLM model names, chat endpoint, file paths, Streamlit port, agent parameters, etc. Secrets referenced via `NOTE` comments in the YAML are loaded from `.env` at runtime.
+```yaml
+Postgres:
+  host: "localhost"
+  port: 5432
+  database: "cnss_opex_db"
+  admin_username: "postgres"      # used by bootstrap_db.py / drop_db.py
+  admin_password: "postgres"      # used by bootstrap_db.py / drop_db.py
+  username: "fira_user"           # used by the app at runtime
+  password: "fira_password"       # used by the app at runtime
+```
 
-> **Note:** Never commit `.env` to version control. The `env.example` is the safe, credential-free template to share with your team.
+> **Note:** The admin credentials are only used during database bootstrap to create the database, enable extensions, and transfer table ownership. The application itself connects using the `username` / `password` credentials at runtime.
 
 ### 6. Create Data Directories
 
@@ -294,7 +289,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 **Option B — Automated via bootstrap (creates user automatically):**
 
-If you skip the manual step above, the bootstrap script will create the `fira_user` role automatically using the admin credentials from `.env`. Just make sure `POSTGRES_USER` and `POSTGRES_PWD` are set in your `.env` file.
+If you skip the manual step above, the bootstrap script will create the `fira_user` role automatically using the admin credentials from `config/config.yaml`.
 
 ### Bootstrap the Database
 
@@ -352,7 +347,7 @@ DROP ROLE IF EXISTS fira_user;
 CREATE ROLE fira_user WITH LOGIN PASSWORD 'new_password';
 ```
 
-Then update `POSTGRES_PWD` in your `.env` file.
+Then update `password` in the Postgres section of `config/config.yaml`.
 
 **Step 3 — Re-bootstrap (recreates tables + grants privileges):**
 
@@ -511,7 +506,7 @@ fira/
 │   ├── chat_persistence.py         #   SQLAlchemy session/message persistence
 │   └── prompts.py                  #   LLM system prompt configuration
 ├── config/                         # Configuration files
-│   ├── config.py                   #   Unified config loader (YAML + .env)
+│   ├── config.py                   #   Unified config loader (YAML-first, .env for API keys)
 │   ├── config.yaml                 #   Main configuration
 │   ├── schema.yaml                 #   Vector DB schema definition (opex_data_hybrid)
 │   ├── schema_config.py            #   Schema YAML loader and SQL formatter
@@ -644,29 +639,28 @@ RESET ROLE;
 
 ## Configuration Reference
 
-All settings can be configured via `config/config.yaml` or environment variables (`.env`). Environment variables take precedence.
+All settings are configured in `config/config.yaml`. Only `QGENIE_API_KEY` goes in `.env`.
 
-| Setting | YAML Path | Env Variable | Default |
-|---------|-----------|-------------|---------|
-| OpEx Files Path | `Path.source_path` | `SOURCE_PATH` | `../files/opex` |
-| Resource Files Path | `Path.resource_path` | `RESOURCE_PATH` | `../files/resource` |
-| JSONL Output Path | `Path.out_path` | `OUT_PATH` | `out` |
-| Excel File Names | `Excel.file_names` | `EXCEL_FILE_NAMES` | *(comma-separated list)* |
-| DB Host | `Postgres.host` | `POSTGRES_HOST` | `localhost` |
-| DB Port | `Postgres.port` | `POSTGRES_PORT` | `5432` |
-| DB Name | `Postgres.database` | `POSTGRES_DB_NAME` | `cnss_opex_db` |
-| DB Admin User | `Postgres.admin_username` | `POSTGRES_ADMIN_USER` | `postgres` |
-| DB Admin Password | *(secrets — .env)* | `POSTGRES_ADMIN_PWD` | — |
-| DB App User | `Postgres.username` | `POSTGRES_USER` | `fira_user` |
-| DB App Password | *(secrets — .env)* | `POSTGRES_PWD` | — |
-| LLM API Key | *(secrets — .env)* | `QGENIE_API_KEY` | — |
-| LLM Model | `Qgenie.model_name` | — | `qgenie` |
-| Chat Endpoint | `Qgenie.chat_endpoint` | `QGENIE_CHAT_ENDPOINT` | — |
-| Coding Model | `Qgenie.coding_model_name` | — | `anthropic::claude-4-sonnet` |
-| Reasoning Model | `Qgenie.reasoning_model_name` | — | `azure::gpt-5.2` |
-| Streamlit Port | `Streamlit.port` | `STREAMLIT_PORT` | `8507` |
-| Feedback Email | `Feedback.email_id` | `FEEDBACK_EMAIL_ID` | — |
-| Log Level | — | `LOG_LEVEL` | `INFO` |
+| Setting | YAML Path | Default |
+|---------|-----------|---------|
+| OpEx Files Path | `Path.source_path` | `../files/opex` |
+| Resource Files Path | `Path.resource_path` | `../files/resource` |
+| JSONL Output Path | `Path.out_path` | `out` |
+| Excel File Names | `Excel.file_names` | *(comma-separated list)* |
+| DB Host | `Postgres.host` | `localhost` |
+| DB Port | `Postgres.port` | `5432` |
+| DB Name | `Postgres.database` | `cnss_opex_db` |
+| DB Admin User | `Postgres.admin_username` | `postgres` |
+| DB Admin Password | `Postgres.admin_password` | `postgres` |
+| DB App User | `Postgres.username` | `fira_user` |
+| DB App Password | `Postgres.password` | `fira_password` |
+| LLM API Key | `.env` → `QGENIE_API_KEY` | — |
+| LLM Model | `Qgenie.model_name` | `qgenie` |
+| Chat Endpoint | `Qgenie.chat_endpoint` | — |
+| Coding Model | `Qgenie.coding_model_name` | `anthropic::claude-4-sonnet` |
+| Reasoning Model | `Qgenie.reasoning_model_name` | `azure::gpt-5.2` |
+| Streamlit Port | `Streamlit.port` | `8507` |
+| Feedback Email | `Feedback.email_id` | — |
 
 ---
 
@@ -679,8 +673,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # 2. Configure
-cp env.example .env          # Edit: set POSTGRES_ADMIN_PWD, POSTGRES_USER, POSTGRES_PWD, QGENIE_API_KEY
-# Review config/config.yaml  # Adjust host, port, models as needed
+cp env.example .env          # Edit: set QGENIE_API_KEY
+# Review config/config.yaml  # Adjust DB credentials, host, port, models as needed
 
 # 3. Create data directories
 mkdir -p ../files/opex ../files/resource

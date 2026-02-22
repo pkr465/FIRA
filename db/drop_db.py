@@ -39,7 +39,7 @@ TARGET_TABLES = [
 
 
 def load_pg_config(config_path="config/config.yaml") -> dict:
-    """Load Postgres connection params from config YAML + .env overrides."""
+    """Load Postgres ADMIN connection params from config.yaml."""
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config not found: {config_path}")
 
@@ -48,22 +48,12 @@ def load_pg_config(config_path="config/config.yaml") -> dict:
 
     pg = cfg.get("Postgres", {})
 
-    # Load .env overrides
-    try:
-        from dotenv import load_dotenv, find_dotenv
-        for env_file in [".default.env", ".env"]:
-            env_path = find_dotenv(env_file)
-            if env_path:
-                load_dotenv(env_path, override=True)
-    except ImportError:
-        pass
-
     return {
-        "host":     os.environ.get("POSTGRES_HOST", pg.get("host", "localhost")),
-        "port":     int(os.environ.get("POSTGRES_PORT", pg.get("port", 5432))),
-        "database": os.environ.get("POSTGRES_DB_NAME", pg.get("database", "cnss_opex_db")),
-        "user":     os.environ.get("POSTGRES_ADMIN_USER", pg.get("admin_username", "postgres")),
-        "password": os.environ.get("POSTGRES_ADMIN_PWD", pg.get("admin_password", "postgres")),
+        "host":     pg.get("host", "localhost"),
+        "port":     int(pg.get("port", 5432)),
+        "database": pg.get("database", "cnss_opex_db"),
+        "user":     pg.get("admin_username", "postgres"),
+        "password": pg.get("admin_password", "postgres"),
     }
 
 

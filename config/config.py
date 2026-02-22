@@ -165,7 +165,7 @@ class _Config:
                 # Database
                 (('Database', 'database_name'), 'DATABASE_NAME'),
                 
-                # Postgres Section
+                # Postgres Section — all values come from config.yaml
                 (('Postgres', 'connection'), 'POSTGRES_CONNECTION'),
                 (('Postgres', 'admin_username'), 'POSTGRES_ADMIN_USER'),
                 (('Postgres', 'admin_password'), 'POSTGRES_ADMIN_PWD'),
@@ -178,6 +178,8 @@ class _Config:
                 (('Postgres', 'password'), 'POSTGRES_PWD'),
                 (('Postgres', 'host'), 'POSTGRES_HOST'),
                 (('Postgres', 'port'), 'POSTGRES_PORT'),
+                # NOTE: Postgres passwords are now in config.yaml directly.
+                # The env-var override still works if someone sets POSTGRES_PWD etc.
 
                 # Streamlit Section
                 (('Streamlit', 'port'), 'STREAMLIT_PORT'),
