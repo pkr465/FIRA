@@ -1,92 +1,114 @@
-import psycopg2
-import yaml
-import argparse
-import sys
-import logging
+"""
+FIRA — Drop all application tables from PostgreSQL.
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+Drops ALL FIRA tables in dependency-safe order:
+  1. chat_messages      (FK → chat_sessions)
+  2. chat_sessions
+  3. opex_data_hybrid
+  4. bpafg_demand
+  5. priority_template
+  6. langchain_pg_embedding
+  7. langchain_pg_collection
+
+Usage:
+    python db/drop_db.py                     # interactive confirmation
+    python db/drop_db.py --force             # skip confirmation (automation)
+    python db/drop_db.py --config path.yaml  # custom config
+"""
+
+import os
+import sys
+import argparse
+import logging
+import yaml
+import psycopg2
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# List of tables to drop (Order matters if not using CASCADE, but we will use CASCADE)
-# 1. opex_data_hybrid (Your custom data)
-# 2. langchain_pg_embedding (Vector data)
-# 3. langchain_pg_collection (Vector collections)
+# All FIRA tables in dependency-safe drop order
 TARGET_TABLES = [
+    "chat_messages",
+    "chat_sessions",
     "opex_data_hybrid",
+    "bpafg_demand",
+    "priority_template",
     "langchain_pg_embedding",
-    "langchain_pg_collection"
+    "langchain_pg_collection",
 ]
 
-def load_config(config_path="config/config.yaml"):
-    """Load database configuration from YAML."""
-    try:
-        with open(config_path, "r") as f:
-            return yaml.safe_load(f)
-    except Exception as e:
-        logger.error(f"Failed to load config file: {e}")
-        sys.exit(1)
 
-def get_db_connection(config):
-    """Establish connection to PostgreSQL."""
-    try:
-        db_cfg = config.get("database", {})
-        conn = psycopg2.connect(
-            host=db_cfg.get("host", "localhost"),
-            port=db_cfg.get("port", 5432),
-            database=db_cfg.get("dbname", "postgres"),
-            user=db_cfg.get("user", "postgres"),
-            password=db_cfg.get("password", "")
-        )
-        return conn
-    except Exception as e:
-        logger.error(f"Failed to connect to database: {e}")
-        sys.exit(1)
+def load_pg_config(config_path="config/config.yaml") -> dict:
+    """Load Postgres connection params from config YAML + .env overrides."""
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Config not found: {config_path}")
 
-def drop_tables(config_path, force=False):
-    config = load_config(config_path)
-    conn = get_db_connection(config)
-    
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+
+    pg = cfg.get("Postgres", {})
+
+    # Load .env overrides
+    try:
+        from dotenv import load_dotenv, find_dotenv
+        for env_file in [".default.env", ".env"]:
+            env_path = find_dotenv(env_file)
+            if env_path:
+                load_dotenv(env_path, override=True)
+    except ImportError:
+        pass
+
+    return {
+        "host":     os.environ.get("POSTGRES_HOST", pg.get("host", "localhost")),
+        "port":     int(os.environ.get("POSTGRES_PORT", pg.get("port", 5432))),
+        "database": os.environ.get("POSTGRES_DB_NAME", pg.get("database", "cnss_opex_db")),
+        "user":     os.environ.get("POSTGRES_ADMIN_USER", pg.get("admin_username", "postgres")),
+        "password": os.environ.get("POSTGRES_ADMIN_PWD", pg.get("admin_password", "postgres")),
+    }
+
+
+def drop_tables(config_path="config/config.yaml", force=False):
+    """Drop all FIRA application tables."""
+    params = load_pg_config(config_path)
+    logger.info(f"Connecting to {params['host']}:{params['port']}/{params['database']} as {params['user']}")
+
+    conn = psycopg2.connect(**params)
+    conn.autocommit = True
+
     try:
         cur = conn.cursor()
-        
-        # 1. Safety Check
+
+        # Safety confirmation
         if not force:
-            print("\nWARNING: This will DROP (delete) the following tables:")
+            print(f"\nWARNING: This will DROP the following tables from '{params['database']}':")
             for t in TARGET_TABLES:
                 print(f"  - {t}")
-            print("\nThis action is irreversible. All data and schema definitions will be lost.")
+            print("\nThis action is IRREVERSIBLE. All data and schema definitions will be lost.")
             confirm = input("Type 'DELETE' to confirm: ")
             if confirm != "DELETE":
                 print("Operation cancelled.")
                 return
 
-        # 2. Execution
+        # Drop each table
         for table in TARGET_TABLES:
-            logger.info(f"Dropping table: {table}...")
-            # CASCADE ensures that if a table depends on this one, it is also dropped/handled
             cur.execute(f"DROP TABLE IF EXISTS {table} CASCADE;")
-            print("🗑️  Dropping stale table 'opex_data_hybrid'...")
-            cur.execute("DROP TABLE IF EXISTS opex_data_hybrid CASCADE;")
-            print("✅ Table dropped. You can now run main.py.")
-        
-        conn.commit()
-        logger.info("Successfully dropped all specified tables.")
-        
+            logger.info(f"  Dropped: {table}")
+
+        logger.info("All FIRA tables dropped successfully.")
+        print("\nNext steps:")
+        print("  1. python bootstrap_db.py       # Recreate tables")
+        print("  2. python main.py                # Re-ingest OpEx data")
+
     except Exception as e:
-        logger.error(f"An error occurred during drop: {e}")
-        conn.rollback()
+        logger.error(f"Drop failed: {e}")
+        sys.exit(1)
     finally:
         conn.close()
 
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Drop application tables from PostgreSQL.")
+    parser = argparse.ArgumentParser(description="FIRA — Drop all application tables.")
     parser.add_argument("--config", default="config/config.yaml", help="Path to config.yaml")
     parser.add_argument("--force", action="store_true", help="Skip confirmation prompt")
-    
     args = parser.parse_args()
-
     drop_tables(args.config, args.force)
-   

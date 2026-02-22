@@ -40,7 +40,8 @@ WELCOME_CSS = """
     position: relative;
 }
 .welcome-hero .tagline {
-    color: #C8E6C9;
+    color: #C8E6C9 !important;
+    -webkit-text-fill-color: #C8E6C9 !important;
     font-family: 'IBM Plex Sans', sans-serif;
     font-size: 1.05rem;
     font-weight: 400;
@@ -51,7 +52,8 @@ WELCOME_CSS = """
 .welcome-hero .version-badge {
     display: inline-block;
     background: rgba(255,255,255,0.15);
-    color: #E8F5E9;
+    color: #E8F5E9 !important;
+    -webkit-text-fill-color: #E8F5E9 !important;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.75rem;
     padding: 3px 14px;
@@ -60,12 +62,21 @@ WELCOME_CSS = """
     position: relative;
 }
 .welcome-hero .description {
-    color: #E8F5E9;
+    color: #E8F5E9 !important;
+    -webkit-text-fill-color: #E8F5E9 !important;
     font-size: 0.92rem;
     line-height: 1.6;
     max-width: 700px;
     margin: 1rem auto 0;
     position: relative;
+}
+
+/* ── Hero inner text override (beat global !important on p, span) ── */
+.welcome-hero p,
+.welcome-hero span,
+.welcome-hero div {
+    color: #E8F5E9 !important;
+    -webkit-text-fill-color: #E8F5E9 !important;
 }
 
 /* ── Quick Start Banner ── */

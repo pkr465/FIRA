@@ -75,12 +75,19 @@ cp env.example .env
 Open `.env` and set your credentials:
 
 ```env
+# LLM
 QGENIE_API_KEY=your-actual-api-key
+
+# PostgreSQL — Admin (used only by bootstrap_db.py)
 POSTGRES_ADMIN_USER=postgres
-POSTGRES_ADMIN_PWD=postgres
-POSTGRES_USER=your_db_user
-POSTGRES_PWD=your_db_password
+POSTGRES_ADMIN_PWD=your_postgres_admin_password
+
+# PostgreSQL — Application user (used by the running app)
+POSTGRES_USER=fira_user
+POSTGRES_PWD=your_fira_password
 ```
+
+> **Important:** The admin credentials (`POSTGRES_ADMIN_*`) are only used during database bootstrap to create the database, enable extensions, and set up the application user. The application itself connects using the `POSTGRES_USER` / `POSTGRES_PWD` credentials at runtime.
 
 **Step B:** Review `config/config.yaml` and adjust settings for your environment — database host/port, LLM model names, chat endpoint, file paths, Streamlit port, agent parameters, etc. Secrets referenced via `NOTE` comments in the YAML are loaded from `.env` at runtime.
 
@@ -239,15 +246,59 @@ psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;" -d template1
 
 ---
 
+### Create the Application User (Manual — One Time)
+
+Before running the bootstrap, create a dedicated application user in PostgreSQL. This separates admin operations from runtime access and follows the principle of least privilege.
+
+**Option A — via psql (recommended):**
+
+```bash
+# Connect as the postgres superuser
+psql -U postgres
+```
+
+```sql
+-- Create the application role
+CREATE ROLE fira_user WITH LOGIN PASSWORD 'your_fira_password';
+
+-- Create the database
+CREATE DATABASE cnss_opex_db OWNER postgres;
+
+-- Connect to the new database
+\c cnss_opex_db
+
+-- Enable pgvector extension (requires superuser)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Grant privileges to the application user
+GRANT CONNECT ON DATABASE cnss_opex_db TO fira_user;
+GRANT USAGE ON SCHEMA public TO fira_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO fira_user;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO fira_user;
+
+-- Ensure future tables are also accessible
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO fira_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO fira_user;
+
+\q
+```
+
+**Option B — Automated via bootstrap (creates user automatically):**
+
+If you skip the manual step above, the bootstrap script will create the `fira_user` role automatically using the admin credentials from `.env`. Just make sure `POSTGRES_USER` and `POSTGRES_PWD` are set in your `.env` file.
+
 ### Bootstrap the Database
 
 The bootstrap script handles the complete database setup automatically:
 
 1. Creates the `cnss_opex_db` database if it doesn't exist
 2. Enables the pgvector extension
-3. Creates all three application tables (`opex_data_hybrid`, `bpafg_demand`, `priority_template`)
-4. Applies all indexes (including IVFFlat vector similarity index)
-5. Validates existing schemas and reports any column mismatches
+3. Creates the application user (`fira_user`) and grants privileges
+4. Creates all three application tables (`opex_data_hybrid`, `bpafg_demand`, `priority_template`)
+5. Applies all indexes (including IVFFlat vector similarity index)
+6. Validates existing schemas and reports any column mismatches
 
 ```bash
 python bootstrap_db.py
@@ -262,6 +313,59 @@ python bootstrap_db.py --config config/config.yaml
 > **Note:** The bootstrap is fully idempotent — safe to run multiple times. Existing tables are validated rather than recreated.
 
 > **Troubleshooting:** If you get `could not access file "$libdir/vector"`, re-run the pgvector installation steps for your OS and restart PostgreSQL before running the bootstrap again.
+
+### Nuclear Reset — Drop Everything and Start Fresh
+
+If you need to completely wipe all tables and recreate them with proper privileges (e.g., after a permission error or schema change):
+
+**Step 1 — Drop all FIRA tables:**
+
+```bash
+python db/drop_db.py               # interactive — type DELETE to confirm
+python db/drop_db.py --force       # skip confirmation (automation/CI)
+```
+
+This drops all 7 FIRA tables in dependency-safe order: `chat_messages`, `chat_sessions`, `opex_data_hybrid`, `bpafg_demand`, `priority_template`, `langchain_pg_embedding`, `langchain_pg_collection`.
+
+**Step 2 — (Optional) Drop and recreate the application user:**
+
+If you also need to reset the user/password:
+
+```bash
+psql -U postgres -d cnss_opex_db
+```
+
+```sql
+-- Revoke and drop the old user
+REASSIGN OWNED BY fira_user TO postgres;
+DROP OWNED BY fira_user;
+DROP ROLE IF EXISTS fira_user;
+
+-- Recreate with a new password
+CREATE ROLE fira_user WITH LOGIN PASSWORD 'new_password';
+```
+
+Then update `POSTGRES_PWD` in your `.env` file.
+
+**Step 3 — Re-bootstrap (recreates tables + grants privileges):**
+
+```bash
+python bootstrap_db.py
+```
+
+**Step 4 — Re-ingest data:**
+
+```bash
+python main.py                                                               # OpEx
+python -m utils.parsers.cbn_data_parser --db postgres --data-dir ../files/resource  # Resource
+```
+
+**Step 5 — Verify:**
+
+```bash
+psql -U fira_user -d cnss_opex_db -c "\dt"
+# Should list: opex_data_hybrid, bpafg_demand, priority_template
+```
 
 ---
 
@@ -485,11 +589,13 @@ python db/list_db.py --limit 5        # Specific count
 python db/list_db.py --all            # All rows
 
 # Clear data (interactive confirmation)
-python db/clear_db.py
+python db/clear_db.py                 # Clears opex_data_hybrid (default)
+python db/clear_db.py --table bpafg_demand         # Specific table
+python db/clear_db.py --table priority_template     # Specific table
 python db/clear_db.py --force         # Skip confirmation (automation)
 
-# Drop tables (interactive confirmation)
-python db/drop_db.py
+# Drop ALL tables (interactive confirmation)
+python db/drop_db.py                  # Drops all 7 FIRA tables
 python db/drop_db.py --force          # Skip confirmation (automation)
 ```
 
@@ -498,18 +604,33 @@ After dropping tables, re-run `python bootstrap_db.py` and data ingestion to reb
 ### Useful psql Commands
 
 ```bash
+# Connect as the application user (recommended for queries)
+psql -U fira_user -d cnss_opex_db
+
+# Connect as admin (for DDL / troubleshooting)
 psql -U postgres -d cnss_opex_db
 ```
 
 ```sql
+-- Check tables and permissions
 \dt                                     -- List all tables
-\d opex_data_hybrid                     -- Describe OpEx hybrid table
-\d bpafg_demand                         -- Describe demand table
-\d priority_template                    -- Describe priority table
+\dp                                     -- Show table privileges
+\du fira_user                           -- Show user roles
+
+-- Describe tables
+\d opex_data_hybrid                     -- OpEx hybrid table
+\d bpafg_demand                         -- Demand table
+\d priority_template                    -- Priority table
+
+-- Row counts
 SELECT COUNT(*) FROM opex_data_hybrid;
 SELECT COUNT(*) FROM bpafg_demand;
 SELECT COUNT(*) FROM priority_template;
-SELECT DISTINCT project_name FROM bpafg_demand;
+
+-- Verify app user can query
+SET ROLE fira_user;
+SELECT COUNT(*) FROM opex_data_hybrid;
+RESET ROLE;
 ```
 
 ---
@@ -524,11 +645,14 @@ All settings can be configured via `config/config.yaml` or environment variables
 | Resource Files Path | `Path.resource_path` | `RESOURCE_PATH` | `../files/resource` |
 | JSONL Output Path | `Path.out_path` | `OUT_PATH` | `out` |
 | Excel File Names | `Excel.file_names` | `EXCEL_FILE_NAMES` | *(comma-separated list)* |
-| DB Connection | `Postgres.connection` | `POSTGRES_CONNECTION` | `postgresql+psycopg2://postgres:postgres@localhost/cnss_opex_db` |
 | DB Host | `Postgres.host` | `POSTGRES_HOST` | `localhost` |
 | DB Port | `Postgres.port` | `POSTGRES_PORT` | `5432` |
 | DB Name | `Postgres.database` | `POSTGRES_DB_NAME` | `cnss_opex_db` |
-| LLM API Key | *(secrets only — .env)* | `QGENIE_API_KEY` | — |
+| DB Admin User | `Postgres.admin_username` | `POSTGRES_ADMIN_USER` | `postgres` |
+| DB Admin Password | *(secrets — .env)* | `POSTGRES_ADMIN_PWD` | — |
+| DB App User | `Postgres.username` | `POSTGRES_USER` | `fira_user` |
+| DB App Password | *(secrets — .env)* | `POSTGRES_PWD` | — |
+| LLM API Key | *(secrets — .env)* | `QGENIE_API_KEY` | — |
 | LLM Model | `Qgenie.model_name` | — | `qgenie` |
 | Chat Endpoint | `Qgenie.chat_endpoint` | `QGENIE_CHAT_ENDPOINT` | — |
 | Coding Model | `Qgenie.coding_model_name` | — | `anthropic::claude-4-sonnet` |
@@ -548,20 +672,23 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # 2. Configure
-cp env.example .env          # Edit with your secrets
-# Review config/config.yaml  # Adjust settings
+cp env.example .env          # Edit: set POSTGRES_ADMIN_PWD, POSTGRES_USER, POSTGRES_PWD, QGENIE_API_KEY
+# Review config/config.yaml  # Adjust host, port, models as needed
 
 # 3. Create data directories
 mkdir -p ../files/opex ../files/resource
 
-# 4. Bootstrap database (creates DB, extension, all tables)
+# 4. Bootstrap database (creates DB, extension, app user, all tables, privileges)
 python bootstrap_db.py
 
-# 5. Ingest data (optional — can also use Data Mgmt UI)
+# 5. Verify app user can connect
+psql -U fira_user -d cnss_opex_db -c "SELECT 1"
+
+# 6. Ingest data (optional — can also use Data Mgmt UI)
 python main.py                                                    # OpEx
 python -m utils.parsers.cbn_data_parser --db postgres --data-dir ../files/resource  # Resource
 
-# 6. Launch
+# 7. Launch
 python -m ui.launch           # Opens at http://localhost:8507
 ```
 

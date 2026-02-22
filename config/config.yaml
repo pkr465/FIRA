@@ -79,12 +79,20 @@ Database:
 # -----------------------------------------------------------------------------
 # PostgreSQL / PGVector Settings
 # -----------------------------------------------------------------------------
-# NOTE: admin_password, password should be set in .env, not here.
+# Passwords should be set in .env (POSTGRES_ADMIN_PWD, POSTGRES_PWD).
+# The admin user (postgres) is used for bootstrap (CREATE DATABASE, extensions).
+# The app user (fira_user) is used at runtime for all queries.
 Postgres:
-  connection: "postgresql+psycopg2://postgres:postgres@localhost/cnss_opex_db"
   host: "localhost"
   port: 5432
   database: "cnss_opex_db"
+  # --- Admin credentials (for bootstrap_db.py only) ---
+  admin_username: "postgres"
+  # admin_password: loaded from .env → POSTGRES_ADMIN_PWD
+  # --- Application credentials (used by the app at runtime) ---
+  username: "fira_user"
+  # password: loaded from .env → POSTGRES_PWD
+  # --- Collection / Embedding tables ---
   collection: "cnss_opex_db"
   collection_tablename: "langchain_pg_collection"
   embedding_tablename: "langchain_pg_embedding"

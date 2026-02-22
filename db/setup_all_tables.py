@@ -260,6 +260,60 @@ class DatabaseBootstrap:
         finally:
             conn.close()
 
+    # -- step 1b: ensure application user exists -----------------------------
+
+    def ensure_app_user(self) -> None:
+        """Create the application-level database user (fira_user) if it doesn't exist."""
+        db_name = self.pg_config["database"]
+
+        # Determine app user credentials from .env / config
+        app_user = os.environ.get("POSTGRES_USER", "fira_user")
+        app_pwd = os.environ.get("POSTGRES_PWD", "fira_password")
+
+        logger.info(f"Checking application user '{app_user}'...")
+        conn = self._connect_app()
+        try:
+            cur = conn.cursor()
+
+            # Check if role already exists
+            cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (app_user,))
+            exists = cur.fetchone() is not None
+
+            if not exists:
+                logger.info(f"  Creating role '{app_user}'...")
+                cur.execute(
+                    f"CREATE ROLE \"{app_user}\" WITH LOGIN PASSWORD %s", (app_pwd,)
+                )
+                logger.info(f"  ✅ Role '{app_user}' created.")
+            else:
+                logger.info(f"  ✅ Role '{app_user}' already exists.")
+
+            # Grant privileges: CONNECT, schema usage, and table-level access
+            cur.execute(f'GRANT CONNECT ON DATABASE "{db_name}" TO "{app_user}"')
+            cur.execute(f'GRANT USAGE ON SCHEMA public TO "{app_user}"')
+            cur.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{app_user}"')
+            cur.execute(f'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "{app_user}"')
+
+            # Set default privileges so future tables are also accessible
+            cur.execute(
+                f'ALTER DEFAULT PRIVILEGES IN SCHEMA public '
+                f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{app_user}"'
+            )
+            cur.execute(
+                f'ALTER DEFAULT PRIVILEGES IN SCHEMA public '
+                f'GRANT USAGE, SELECT ON SEQUENCES TO "{app_user}"'
+            )
+
+            conn.commit()
+            logger.info(f"  ✅ Privileges granted to '{app_user}' on '{db_name}'.")
+            cur.close()
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"  ❌ Failed to setup app user: {e}")
+            self.issues.append(f"User setup failed: {e}")
+        finally:
+            conn.close()
+
     # -- step 2: enable pgvector --------------------------------------------
 
     def ensure_vector_extension(self) -> None:
@@ -424,6 +478,9 @@ class DatabaseBootstrap:
 
         # Step 2: Enable pgvector
         self.ensure_vector_extension()
+
+        # Step 2b: Ensure application user and privileges
+        self.ensure_app_user()
 
         # Step 3: Create / validate tables
         logger.info("\nSetting up tables...")

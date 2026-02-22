@@ -86,7 +86,7 @@ def main():
             break
             
     if not current_page:
-        current_page = PAGES["ChatBot"]
+        current_page = PAGES["Welcome"]
 
     # 2. Sidebar Navigation
     with st.sidebar:
