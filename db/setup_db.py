@@ -45,12 +45,39 @@ class DatabaseSetupManager:
             if not pg_config:
                 raise KeyError("Could not find 'Postgres' section in config.")
 
-            username = pg_config.get('user') or pg_config.get('username')
-            password = pg_config['password']
-            host = pg_config['host']
-            port = pg_config['port']
-            database = pg_config.get('dbname') or pg_config.get('database')
-            
+            # Load .env so POSTGRES_* env vars are available
+            try:
+                from dotenv import load_dotenv, find_dotenv
+                for env_file in [".default.env", ".env"]:
+                    env_path = find_dotenv(env_file)
+                    if env_path:
+                        load_dotenv(env_path, override=True)
+            except ImportError:
+                pass
+
+            # Resolve credentials: env vars → YAML keys (multiple naming conventions)
+            username = (
+                os.environ.get("POSTGRES_USER")
+                or pg_config.get('username')
+                or pg_config.get('user')
+                or "fira_user"
+            )
+            password = (
+                os.environ.get("POSTGRES_PWD")
+                or os.environ.get("POSTGRES_ADMIN_PWD")
+                or pg_config.get('password')
+                or pg_config.get('admin_password')
+                or "postgres"
+            )
+            host = os.environ.get("POSTGRES_HOST") or pg_config.get('host', 'localhost')
+            port = int(os.environ.get("POSTGRES_PORT", 0) or pg_config.get('port', 5432))
+            database = (
+                os.environ.get("POSTGRES_DB_NAME")
+                or pg_config.get('database')
+                or pg_config.get('dbname')
+                or "cnss_opex_db"
+            )
+
             return f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
 
         except KeyError as e:
