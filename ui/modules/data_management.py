@@ -213,11 +213,17 @@ class DataManagement(PageBase):
 
                 status.update(label="OpEx pipeline completed successfully!", state="complete")
                 st.cache_data.clear()
+                # Count rows for celebration
+                opex_count = self._table_row_count("opex_data_hybrid") or 0
 
             except Exception as e:
+                opex_count = None
                 status.update(label="Pipeline failed!", state="error")
                 st.error(f"Pipeline failed: {e}")
                 logger.exception(e)
+
+        if opex_count is not None:
+            self._celebrate_ingestion(opex_count, "OpEx")
 
     # =====================================================================
     # Resource Planner section
@@ -298,8 +304,10 @@ class DataManagement(PageBase):
             return
         cur = conn.cursor()
 
+        rp_total = None
         with st.status("Ingesting resource planner data...", expanded=True) as status:
             try:
+                rp_total = 0
                 if demand_file:
                     st.write(f"Saving `{demand_file.name}` to `files/resource/`...")
                     save_path = os.path.join(resource_dir, demand_file.name)
@@ -309,6 +317,7 @@ class DataManagement(PageBase):
                     st.write("Clearing existing demand data and re-ingesting...")
                     df = parse_bpafg_demand(save_path)
                     n = insert_bpafg_to_db(df, cur, use_postgres=True, truncate_first=True)
+                    rp_total += n
                     st.write(f"Replaced demand data with **{n}** rows from `{demand_file.name}`.")
 
                 if priority_file:
@@ -320,6 +329,7 @@ class DataManagement(PageBase):
                     st.write("Clearing existing priority data and re-ingesting...")
                     df = parse_priority_template(save_path)
                     n = insert_priority_to_db(df, cur, use_postgres=True, truncate_first=True)
+                    rp_total += n
                     st.write(f"Replaced priority data with **{n}** rows from `{priority_file.name}`.")
 
                 conn.commit()
@@ -327,6 +337,7 @@ class DataManagement(PageBase):
                 status.update(label="Resource planner data ingested successfully!", state="complete")
 
             except Exception as e:
+                rp_total = None
                 conn.rollback()
                 status.update(label="Ingestion failed!", state="error")
                 st.error(f"Ingest error: {e}")
@@ -334,8 +345,12 @@ class DataManagement(PageBase):
             finally:
                 conn.close()
 
+        if rp_total is not None:
+            self._celebrate_ingestion(rp_total, "Resource Planner")
+
     def _run_rp_reingest(self):
         """Re-ingest all files from ../files/resource/ (truncates tables first)."""
+        rp_n = None
         with st.status("Re-ingesting resource planner data from files/resource/...", expanded=True) as status:
             try:
                 from utils.parsers.cbn_data_parser import ingest_all
@@ -349,18 +364,22 @@ class DataManagement(PageBase):
                 conn = get_pg_connection()
                 try:
                     st.write("Clearing existing data and re-ingesting all files...")
-                    n = ingest_all(resource_dir, conn.cursor(), use_postgres=True,
-                                   truncate_first=True)
+                    rp_n = ingest_all(resource_dir, conn.cursor(), use_postgres=True,
+                                      truncate_first=True)
                     conn.commit()
-                    st.write(f"Replaced all resource planner data with **{n}** total rows.")
+                    st.write(f"Replaced all resource planner data with **{rp_n}** total rows.")
                     st.cache_data.clear()
-                    status.update(label=f"Re-ingested {n} rows from files/resource/", state="complete")
+                    status.update(label=f"Re-ingested {rp_n} rows from files/resource/", state="complete")
                 finally:
                     conn.close()
             except Exception as e:
+                rp_n = None
                 status.update(label="Re-ingestion failed!", state="error")
                 st.error(f"Re-ingest error: {e}")
                 logger.exception(e)
+
+        if rp_n is not None:
+            self._celebrate_ingestion(rp_n, "Resource Planner")
 
     # =====================================================================
     # Headcount section
@@ -421,9 +440,10 @@ class DataManagement(PageBase):
         hc_dir = os.path.join("..", "files", "headcount")
         os.makedirs(hc_dir, exist_ok=True)
 
+        hc_total = None
         with st.status("Ingesting headcount data...", expanded=True) as status:
             try:
-                total_rows = 0
+                hc_total = 0
                 st.write("Clearing existing headcount data and re-ingesting...")
                 for i, f in enumerate(uploaded_files):
                     # Save file
@@ -443,16 +463,20 @@ class DataManagement(PageBase):
 
                     # Truncate only before first file
                     n = self._insert_headcount_to_db(df, truncate_first=(i == 0))
-                    total_rows += n
+                    hc_total += n
                     st.write(f"Ingested **{n}** rows from `{f.name}`")
 
                 st.cache_data.clear()
-                status.update(label=f"Headcount: replaced with {total_rows} total rows!", state="complete")
+                status.update(label=f"Headcount: replaced with {hc_total} total rows!", state="complete")
 
             except Exception as e:
+                hc_total = None
                 status.update(label="Headcount ingestion failed!", state="error")
                 st.error(f"Headcount ingest error: {e}")
                 logger.exception(e)
+
+        if hc_total is not None:
+            self._celebrate_ingestion(hc_total, "Headcount")
 
     def _run_headcount_reingest(self):
         """Re-ingest all headcount files from ../files/headcount/ (truncates first)."""
@@ -463,11 +487,13 @@ class DataManagement(PageBase):
             st.warning("No `files/headcount/` directory found. Upload files first.")
             return
 
+        hc_n = None
         with st.status("Re-ingesting headcount data from files/headcount/...", expanded=True) as status:
             try:
-                total_rows = 0
+                hc_n = 0
                 files = [f for f in os.listdir(hc_dir) if f.endswith((".csv", ".xlsx", ".xls"))]
                 if not files:
+                    hc_n = None
                     st.warning("No CSV/XLSX files found in files/headcount/")
                     status.update(label="No files found", state="error")
                     return
@@ -482,16 +508,20 @@ class DataManagement(PageBase):
                         df = pd.read_excel(fpath)
                     # Truncate only before first file
                     n = self._insert_headcount_to_db(df, truncate_first=(i == 0))
-                    total_rows += n
+                    hc_n += n
                     st.write(f"Ingested **{n}** rows from `{fname}`")
 
                 st.cache_data.clear()
-                status.update(label=f"Replaced headcount data with {total_rows} rows", state="complete")
+                status.update(label=f"Replaced headcount data with {hc_n} rows", state="complete")
 
             except Exception as e:
+                hc_n = None
                 status.update(label="Re-ingestion failed!", state="error")
                 st.error(f"Headcount re-ingest error: {e}")
                 logger.exception(e)
+
+        if hc_n is not None:
+            self._celebrate_ingestion(hc_n, "Headcount")
 
     @staticmethod
     def _insert_headcount_to_db(df, truncate_first: bool = False) -> int:
@@ -505,8 +535,26 @@ class DataManagement(PageBase):
         from sqlalchemy import text
         from utils.models.database import OpexDB
 
-        # Normalize column names
-        df.columns = [c.strip().lower().replace(" ", "_").replace("-", "_") for c in df.columns]
+        # Normalize column names — strip everything except alphanumeric and underscores
+        # (headcount CSVs often have #, /, (), etc. which break SQLAlchemy bind params)
+        import re
+        clean = []
+        for c in df.columns:
+            name = c.strip().lower()
+            name = re.sub(r'[^a-z0-9]+', '_', name)  # replace any non-alnum run with _
+            name = name.strip('_')                     # trim leading/trailing _
+            if not name or name[0].isdigit():
+                name = f"col_{name}"                   # prefix if empty or starts with digit
+            clean.append(name)
+        # De-duplicate column names (append _2, _3, etc.)
+        seen = {}
+        for i, name in enumerate(clean):
+            if name in seen:
+                seen[name] += 1
+                clean[i] = f"{name}_{seen[name]}"
+            else:
+                seen[name] = 1
+        df.columns = clean
 
         with OpexDB.engine.begin() as conn:
             # Create table if not exists — dynamic schema from DataFrame
@@ -554,3 +602,82 @@ class DataManagement(PageBase):
         except Exception as e:
             st.error(f"Cannot connect to PostgreSQL: {e}")
             return None
+
+    @staticmethod
+    def _celebrate_ingestion(row_count: int, label: str = "Data"):
+        """Show a fun celebration animation with $$ signs floating up like balloons."""
+        import random
+
+        # Generate 20 floating $$ elements with random positions, sizes, and timing
+        symbols = []
+        for i in range(20):
+            left = random.randint(2, 95)
+            delay = round(random.uniform(0, 2.5), 2)
+            duration = round(random.uniform(2.5, 5.0), 2)
+            size = random.choice(["1.2rem", "1.6rem", "2.0rem", "2.5rem", "3.0rem"])
+            opacity = round(random.uniform(0.5, 1.0), 2)
+            wobble = random.randint(-40, 40)
+            symbol = random.choice(["$$", "$", "$$"])
+            color = random.choice(["#2E7D32", "#1B5E20", "#4CAF50", "#8B6914", "#B8860B", "#FFD700"])
+            symbols.append(
+                f'<span class="fira-float" style="'
+                f"left:{left}%; animation-delay:{delay}s; animation-duration:{duration}s; "
+                f'font-size:{size}; opacity:{opacity}; --wobble:{wobble}px; color:{color};'
+                f'">{symbol}</span>'
+            )
+
+        animation_html = f"""
+        <style>
+            @keyframes fira-rise {{
+                0%   {{ transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }}
+                10%  {{ opacity: 1; }}
+                50%  {{ transform: translateY(-200px) translateX(var(--wobble, 20px)) rotate(15deg); opacity: 0.9; }}
+                100% {{ transform: translateY(-420px) translateX(calc(var(--wobble, 20px) * -1)) rotate(-10deg); opacity: 0; }}
+            }}
+            .fira-celebrate-box {{
+                position: relative;
+                height: 180px;
+                overflow: hidden;
+                border-radius: 12px;
+                background: linear-gradient(135deg, #E8F5E9 0%, #FFF8E1 50%, #E8F5E9 100%);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0.5rem 0 1rem;
+                border: 2px solid #4CAF50;
+            }}
+            .fira-celebrate-text {{
+                text-align: center;
+                z-index: 10;
+                position: relative;
+            }}
+            .fira-celebrate-text h2 {{
+                margin: 0;
+                font-size: 1.8rem;
+                color: #1B5E20;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            }}
+            .fira-celebrate-text p {{
+                margin: 4px 0 0;
+                font-size: 1.1rem;
+                color: #555;
+            }}
+            .fira-float {{
+                position: absolute;
+                bottom: -30px;
+                font-weight: bold;
+                animation: fira-rise ease-out forwards;
+                pointer-events: none;
+                z-index: 5;
+                text-shadow: 0 1px 3px rgba(0,0,0,0.15);
+            }}
+        </style>
+        <div class="fira-celebrate-box">
+            <div class="fira-celebrate-text">
+                <h2>{label} Ingestion Complete!</h2>
+                <p><strong>{row_count:,}</strong> rows loaded successfully</p>
+            </div>
+            {''.join(symbols)}
+        </div>
+        """
+        st.markdown(animation_html, unsafe_allow_html=True)
