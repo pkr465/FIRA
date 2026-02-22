@@ -11,10 +11,11 @@ class ResourceDashboard:
     def __init__(self, df: pd.DataFrame):
         self.df = df.copy()
 
-        # Coerce key numeric columns
+        # Coerce key numeric columns and scale to display units
+        # (raw values are ~100x larger than display units)
         for col in ['tm1_mm', 'ods_mm']:
             if col in self.df.columns:
-                self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
+                self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0) / 100.0
 
     def render(self):
         st.subheader("Workforce Composition (TM1 MM)")

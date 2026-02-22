@@ -129,10 +129,10 @@ class GeoOrgMetrics(PageBase):
                 else:
                     df['VP_Name'] = 'Unknown'
                 
-                # Metrics
+                # Metrics — scale to $M (raw values are ~100x larger)
                 target_ods = ods_col if ods_col else 'ods_mm'
                 if target_ods in df.columns:
-                    df['ods_mm'] = pd.to_numeric(df[target_ods], errors='coerce').fillna(0)
+                    df['ods_mm'] = pd.to_numeric(df[target_ods], errors='coerce').fillna(0) / 100.0
                 else:
                     df['ods_mm'] = 0.0
 

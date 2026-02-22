@@ -393,9 +393,10 @@ class Summary(PageBase):
                 df = raw_df
 
             # 3. Coerce numeric columns (JSONB values arrive as strings)
+            #    and scale to $M (raw values are ~100x larger than display units)
             for num_col in ['ods_mm', 'tm1_mm']:
                 if num_col in df.columns:
-                    df[num_col] = pd.to_numeric(df[num_col], errors='coerce').fillna(0)
+                    df[num_col] = pd.to_numeric(df[num_col], errors='coerce').fillna(0) / 100.0
 
             # 4. Determine Latest Fiscal Year
             if 'fiscal_year' in df.columns:
