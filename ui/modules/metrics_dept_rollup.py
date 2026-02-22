@@ -24,10 +24,11 @@ class DeptRollupDashboard:
             st.info("No data available for the selected criteria.")
             return
 
-        # --- Data Cleaning ---
+        # --- Data Cleaning & Scaling ---
         if 'ods_mm' in self.df.columns:
-            # Convert to numeric (values arrive as proper numerics from the SQL CAST)
-            self.df['ods_mm_disp'] = pd.to_numeric(self.df['ods_mm'], errors='coerce').fillna(0)
+            # Convert to numeric, then scale: raw values are in $K (thousands),
+            # divide by 100 to display in $M (millions).
+            self.df['ods_mm_disp'] = pd.to_numeric(self.df['ods_mm'], errors='coerce').fillna(0) / 100.0
         else:
             st.error("Column 'ods_mm' (Spend) not found in data.")
             return
