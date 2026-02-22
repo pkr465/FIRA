@@ -24,23 +24,34 @@ class DeptRollupDashboard:
             st.info("No data available for the selected criteria.")
             return
 
-        # --- Data Cleaning & Scaling ---
+        # --- Data Cleaning ---
         if 'ods_mm' in self.df.columns:
-            # Convert to numeric
-            self.df['ods_mm_raw'] = pd.to_numeric(self.df['ods_mm'], errors='coerce').fillna(0)
-            
-            # SCALE ADJUSTMENT:
-            # Assuming raw data is in Thousands (e.g. 1000 = $1M) or user indicated "decimal off".
-            # We divide by 1000 to convert to Millions for display.
-            # If raw data 1.0 = $1M, remove this division. 
-            # Based on screenshot (3936 displayed vs 3.9 expected), dividing by 1000 corrects the magnitude.
-            self.df['ods_mm_disp'] = self.df['ods_mm_raw'] / 10.0
+            # Convert to numeric (values arrive as proper numerics from the SQL CAST)
+            self.df['ods_mm_disp'] = pd.to_numeric(self.df['ods_mm'], errors='coerce').fillna(0)
         else:
             st.error("Column 'ods_mm' (Spend) not found in data.")
             return
 
         # --- 1. Total Spend by VP (Overview) ---
         st.markdown("### Total Spend by VP ($M)")
+
+        if 'dept_vp' not in self.df.columns or self.df['dept_vp'].isna().all():
+            st.info("No VP data available (dept_vp column missing or empty).")
+            return
+
+        if 'project_desc' not in self.df.columns or self.df['project_desc'].isna().all():
+            self.df['project_desc'] = 'Unknown'
+
+        # Summary metric
+        total_spend = self.df['ods_mm_disp'].sum()
+        unique_vps = self.df['dept_vp'].nunique()
+        unique_projects = self.df['project_desc'].nunique()
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Spend", f"${total_spend:,.2f}M")
+        m2.metric("VPs", unique_vps)
+        m3.metric("Projects", unique_projects)
+        st.markdown("")
+
         vp_summary = self.df.groupby('dept_vp')['ods_mm_disp'].sum().reset_index().sort_values('ods_mm_disp', ascending=True)
         
         fig_summary = go.Figure(go.Bar(
@@ -91,10 +102,9 @@ class DeptRollupDashboard:
         )
         st.plotly_chart(fig_detailed, use_container_width=True)
 
-        with st.expander("View Underlying Data (Raw & Scaled)"):
-            st.info("Note: 'ods_mm_disp' is calculated as Raw Spend / 1000 to correct magnitude.")
-            # Show pivot of scaled values
+        with st.expander("View Underlying Data"):
             pivot_view = rollup.pivot(index='dept_vp', columns='project_desc', values='ods_mm_disp').fillna(0)
+            pivot_view['Total'] = pivot_view.sum(axis=1)
             st.dataframe(pivot_view.style.format("${:,.2f}M"))
 
 class DeptRollup(PageBase):

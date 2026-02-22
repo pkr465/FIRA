@@ -62,12 +62,30 @@ class SandboxPage(PageBase):
                 st.warning("No data.")
                 return
 
+            # Coerce known numeric columns (JSONB values arrive as strings)
+            for col in ['ods_mm', 'tm1_mm']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+            # Also try to coerce any object column that looks numeric
+            for col in df.select_dtypes(include=['object']).columns:
+                try:
+                    converted = pd.to_numeric(df[col], errors='coerce')
+                    if converted.notna().sum() > len(df) * 0.5:  # >50% numeric values
+                        df[col] = converted
+                except Exception:
+                    pass
+
             st.markdown("### Chart Configuration")
             col1, col2, col3, col4 = st.columns(4)
-            
-            numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+
+            numeric_cols = df.select_dtypes(include=['float64', 'int64', 'float32', 'int32']).columns.tolist()
+            # Exclude internal columns from numeric options
+            numeric_cols = [c for c in numeric_cols if c not in ('id', 'project_number')]
             cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
-            all_cols = df.columns.tolist()
+            # Exclude internal columns from categorical options
+            cat_cols = [c for c in cat_cols if c not in ('uuid', 'source_file', 'source_sheet', 'additional_data', 'vector')]
+            all_cols = cat_cols + numeric_cols
 
             with col1:
                 chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Scatter", "Pie"])

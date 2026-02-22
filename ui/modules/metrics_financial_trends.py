@@ -7,64 +7,158 @@ from typing import List
 from utils.models.database import OpexDB
 from .base import PageBase
 
+
 class FinancialTrendsDashboard:
     def __init__(self, df: pd.DataFrame):
-        self.df = df
+        self.df = df.copy()
+
+        # Coerce key numeric columns (JSONB values may arrive as strings)
+        for col in ['ods_mm', 'tm1_mm']:
+            if col in self.df.columns:
+                self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
+
         # Sort months fiscally (Oct start)
-        self.month_order = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
+        self.month_order = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar',
+                            'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
         if 'fiscal_month' in self.df.columns:
-            self.df['fiscal_month'] = pd.Categorical(self.df['fiscal_month'], categories=self.month_order, ordered=True)
+            self.df['fiscal_month'] = pd.Categorical(
+                self.df['fiscal_month'], categories=self.month_order, ordered=True
+            )
             self.df = self.df.sort_values('fiscal_month')
 
     def render(self):
+        # ── Monthly Spend Trend ──
         st.subheader("Monthly Spend Trend ($M)")
-        
-        if 'fiscal_month' in self.df.columns and 'ods_mm' in self.df.columns:
-            # Aggregate
-            monthly = self.df.groupby(['fiscal_month', 'hw_sw'])['ods_mm'].sum().reset_index()
-            
-            # Create Plotly Graph Object Figure
+
+        has_month = 'fiscal_month' in self.df.columns
+        has_spend = 'ods_mm' in self.df.columns
+        has_hw_sw = 'hw_sw' in self.df.columns and self.df['hw_sw'].notna().any()
+
+        if has_month and has_spend:
+            if has_hw_sw:
+                monthly = self.df.groupby(['fiscal_month', 'hw_sw'])['ods_mm'].sum().reset_index()
+            else:
+                monthly = self.df.groupby('fiscal_month')['ods_mm'].sum().reset_index()
+                monthly['hw_sw'] = 'All'
+
             fig = go.Figure()
             for cat in monthly['hw_sw'].unique():
                 subset = monthly[monthly['hw_sw'] == cat]
                 fig.add_trace(go.Scatter(
-                    x=subset['fiscal_month'], 
-                    y=subset['ods_mm'], 
-                    mode='lines+markers', 
-                    name=str(cat)
+                    x=subset['fiscal_month'],
+                    y=subset['ods_mm'],
+                    mode='lines+markers',
+                    name=str(cat),
                 ))
-            
+
             fig.update_layout(
                 title="Monthly Opex Trend (ODS MM)",
                 xaxis_title="Fiscal Month",
                 yaxis_title="Spend ($M)",
-                hovermode="x unified"
+                hovermode="x unified",
             )
             st.plotly_chart(fig, use_container_width=True)
-            
+
             with st.expander("View Data Table"):
-                pivot = monthly.pivot(index='fiscal_month', columns='hw_sw', values='ods_mm').fillna(0)
+                if has_hw_sw:
+                    pivot = monthly.pivot(
+                        index='fiscal_month', columns='hw_sw', values='ods_mm'
+                    ).fillna(0)
+                else:
+                    pivot = monthly.set_index('fiscal_month')[['ods_mm']]
                 st.dataframe(pivot.style.format("${:,.2f}"))
+        else:
+            missing = []
+            if not has_month:
+                missing.append("fiscal_month")
+            if not has_spend:
+                missing.append("ods_mm")
+            st.info(f"Monthly trend requires columns: {', '.join(missing)}. "
+                    "These may not be present in the uploaded data.")
 
         st.markdown("---")
+
+        # ── Quarterly Run Rate ──
         st.subheader("Quarterly Run Rate")
-        
-        if 'fiscal_quarter' in self.df.columns:
-            q_trend = self.df.groupby(['fiscal_quarter', 'hw_sw'])['ods_mm'].sum().reset_index()
-            
+
+        has_quarter = 'fiscal_quarter' in self.df.columns and self.df['fiscal_quarter'].notna().any()
+
+        if has_quarter and has_spend:
+            if has_hw_sw:
+                q_trend = self.df.groupby(['fiscal_quarter', 'hw_sw'])['ods_mm'].sum().reset_index()
+            else:
+                q_trend = self.df.groupby('fiscal_quarter')['ods_mm'].sum().reset_index()
+                q_trend['hw_sw'] = 'All'
+
             fig_bar = go.Figure()
             for cat in q_trend['hw_sw'].unique():
                 subset = q_trend[q_trend['hw_sw'] == cat]
                 fig_bar.add_trace(go.Bar(
-                    x=subset['fiscal_quarter'], 
-                    y=subset['ods_mm'], 
+                    x=subset['fiscal_quarter'],
+                    y=subset['ods_mm'],
                     name=str(cat),
                     text=subset['ods_mm'].apply(lambda x: f"{x:.1f}"),
-                    textposition='auto'
+                    textposition='auto',
                 ))
-                
-            fig_bar.update_layout(title="Quarterly Spend Accumulation", barmode='stack')
+
+            fig_bar.update_layout(
+                title="Quarterly Spend Accumulation",
+                barmode='stack',
+                xaxis_title="Fiscal Quarter",
+                yaxis_title="Spend ($M)",
+            )
             st.plotly_chart(fig_bar, use_container_width=True)
+
+            with st.expander("View Quarterly Data"):
+                if has_hw_sw:
+                    q_pivot = q_trend.pivot(
+                        index='fiscal_quarter', columns='hw_sw', values='ods_mm'
+                    ).fillna(0)
+                else:
+                    q_pivot = q_trend.set_index('fiscal_quarter')[['ods_mm']]
+                q_pivot['Total'] = q_pivot.sum(axis=1)
+                st.dataframe(q_pivot.style.format("${:,.2f}"))
+        else:
+            if not has_quarter:
+                st.info("Quarterly trend requires 'fiscal_quarter' column in the data.")
+            elif not has_spend:
+                st.info("No spend (ods_mm) data available.")
+
+        # ── Budget vs Actual Trend ──
+        has_budget = 'tm1_mm' in self.df.columns
+        if has_month and has_spend and has_budget:
+            st.markdown("---")
+            st.subheader("Budget vs Actual (Monthly)")
+
+            bva = self.df.groupby('fiscal_month').agg(
+                Budget=('tm1_mm', 'sum'),
+                Actual=('ods_mm', 'sum'),
+            ).reset_index()
+            bva['Variance'] = bva['Budget'] - bva['Actual']
+
+            fig_bva = go.Figure()
+            fig_bva.add_trace(go.Bar(
+                x=bva['fiscal_month'], y=bva['Budget'],
+                name='Budget (TM1)', marker_color='#1f77b4',
+            ))
+            fig_bva.add_trace(go.Bar(
+                x=bva['fiscal_month'], y=bva['Actual'],
+                name='Actual (ODS)', marker_color='#2ca02c',
+            ))
+            fig_bva.add_trace(go.Scatter(
+                x=bva['fiscal_month'], y=bva['Variance'],
+                name='Variance', mode='lines+markers',
+                line=dict(color='#d62728', dash='dash'),
+            ))
+            fig_bva.update_layout(
+                title="Budget vs Actual by Month",
+                barmode='group',
+                xaxis_title="Fiscal Month",
+                yaxis_title="$M",
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_bva, use_container_width=True)
+
 
 class FinancialTrends(PageBase):
     def __init__(self, **kwargs):
@@ -80,7 +174,9 @@ class FinancialTrends(PageBase):
 
     def get_available_projects(self) -> List[str]:
         try:
-            query = "SELECT DISTINCT additional_data->>'project_desc' as project FROM opex_data_hybrid WHERE additional_data->>'project_desc' IS NOT NULL ORDER BY 1"
+            query = ("SELECT DISTINCT additional_data->>'project_desc' as project "
+                     "FROM opex_data_hybrid "
+                     "WHERE additional_data->>'project_desc' IS NOT NULL ORDER BY 1")
             with self.db.engine.connect() as conn:
                 return [row[0] for row in conn.execute(text(query)).fetchall()]
         except Exception:
@@ -89,7 +185,7 @@ class FinancialTrends(PageBase):
     def get_data(self, project_name: str) -> pd.DataFrame:
         query = "SELECT * FROM opex_data_hybrid WHERE additional_data->>'project_desc' = :pname"
         raw_df = pd.read_sql(text(query), self.db.engine, params={"pname": project_name})
-        
+
         if not raw_df.empty and 'additional_data' in raw_df.columns:
             json_df = pd.json_normalize(raw_df['additional_data'])
             cols_to_use = json_df.columns.difference(raw_df.columns)
@@ -116,7 +212,7 @@ class FinancialTrends(PageBase):
         col1, _ = st.columns([1, 2])
         with col1:
             sel_proj = st.selectbox("Select Project", self.projects)
-            
+
         if sel_proj:
             df = self.get_data(sel_proj)
             if not df.empty:

@@ -25,12 +25,19 @@ class WinOpexDashboard:
     def __init__(self, df: pd.DataFrame, fiscal_year: str):
         self.df = df
         self.fiscal_year = fiscal_year
-        
+
         # Determine latest and previous quarters dynamically
-        quarters = sorted(self.df['fiscal_quarter'].unique(), reverse=True)
-        self.latest_qtr = quarters[0] if quarters else "Unknown"
+        if 'fiscal_quarter' in self.df.columns:
+            valid_quarters = self.df['fiscal_quarter'].dropna().unique()
+            quarters = sorted(valid_quarters, reverse=True)
+        else:
+            quarters = []
+        self.latest_qtr = quarters[0] if len(quarters) > 0 else "Unknown"
         self.prev_qtr = quarters[1] if len(quarters) > 1 else None
-        
+
+        # Detect whether data has a 'version' column for Budget/Actual split
+        self.has_version = 'version' in self.df.columns and self.df['version'].notna().any()
+
         # Initialize LLM Agent
         self.agent = AgentUtils() if AgentUtils else None
 
@@ -56,19 +63,48 @@ class WinOpexDashboard:
         return 'Other'
 
     def _prepare_variance_data(self, df_subset, value_col, group_cols):
-        """Generic helper to prepare Budget vs Actual tables."""
-        if value_col not in df_subset.columns:
-            return pd.DataFrame()
+        """Generic helper to prepare Budget vs Actual tables.
 
+        When a 'version' column is available in the data, it is used to pivot
+        into Budget vs Actual.  Otherwise, the method falls back to using
+        tm1_mm as Budget and ods_mm as Actual (the standard OpEx convention).
+        """
         df_subset = df_subset.copy()
-        df_subset['Ver_Type'] = df_subset['version'].apply(self._get_version_type)
-        
-        # Group
-        grouped = df_subset.groupby(group_cols + ['Ver_Type'])[value_col].sum().unstack(fill_value=0).reset_index()
-        
-        if 'Budget' not in grouped.columns: grouped['Budget'] = 0.0
-        if 'Actual' not in grouped.columns: grouped['Actual'] = 0.0
-        
+
+        if self.has_version and value_col in df_subset.columns:
+            # ── Version-based pivot ──
+            df_subset['Ver_Type'] = df_subset['version'].apply(self._get_version_type)
+            grouped = (
+                df_subset.groupby(group_cols + ['Ver_Type'])[value_col]
+                .sum()
+                .unstack(fill_value=0)
+                .reset_index()
+            )
+            if 'Budget' not in grouped.columns:
+                grouped['Budget'] = 0.0
+            if 'Actual' not in grouped.columns:
+                grouped['Actual'] = 0.0
+        else:
+            # ── Fallback: tm1_mm = Budget, ods_mm = Actual ──
+            has_budget = 'tm1_mm' in df_subset.columns
+            has_actual = 'ods_mm' in df_subset.columns
+            if not has_budget and not has_actual:
+                return pd.DataFrame()
+
+            agg_dict = {}
+            if has_budget:
+                df_subset['tm1_mm'] = pd.to_numeric(df_subset['tm1_mm'], errors='coerce').fillna(0)
+                agg_dict['Budget'] = ('tm1_mm', 'sum')
+            if has_actual:
+                df_subset['ods_mm'] = pd.to_numeric(df_subset['ods_mm'], errors='coerce').fillna(0)
+                agg_dict['Actual'] = ('ods_mm', 'sum')
+
+            grouped = df_subset.groupby(group_cols).agg(**agg_dict).reset_index()
+            if 'Budget' not in grouped.columns:
+                grouped['Budget'] = 0.0
+            if 'Actual' not in grouped.columns:
+                grouped['Actual'] = 0.0
+
         grouped['Variance'] = grouped['Budget'] - grouped['Actual']
         grouped['Variance %'] = grouped.apply(
             lambda x: (x['Variance'] / x['Budget'] * 100) if x['Budget'] != 0 else 0, axis=1
@@ -169,21 +205,33 @@ class WinOpexDashboard:
     def render_drivers_llm(self):
         """Generates LLM-based commentary comparing Latest Q vs Previous Q and FY performance."""
         st.subheader("Key Drivers Analysis")
-        
+
         if not self.agent:
-            st.warning("⚠️ AI Agent not available for driver analysis.")
+            st.warning("AI Agent not available for driver analysis.")
             return
 
-        # Prepare context data
-        # 1. Compare Latest Q vs Prev Q
-        q_data = self.df[self.df['fiscal_quarter'].isin([self.latest_qtr, self.prev_qtr])].copy()
-        
+        if 'fiscal_quarter' not in self.df.columns or self.latest_qtr == "Unknown":
+            st.info("No quarterly data available for AI driver analysis.")
+            return
+
+        # Prepare context data — compare Latest Q vs Prev Q
+        filter_quarters = [q for q in [self.latest_qtr, self.prev_qtr] if q is not None]
+        q_data = self.df[self.df['fiscal_quarter'].isin(filter_quarters)].copy()
+
         if q_data.empty:
             st.info("Insufficient quarterly data for analysis.")
             return
 
         # Aggregation for prompt
-        breakdown = q_data.groupby(['fiscal_quarter', 'hw_sw'])['ods_mm'].sum().reset_index()
+        group_cols = ['fiscal_quarter']
+        if 'hw_sw' in q_data.columns:
+            group_cols.append('hw_sw')
+        val_col = 'ods_mm' if 'ods_mm' in q_data.columns else 'tm1_mm'
+        if val_col not in q_data.columns:
+            st.info("No spend data available for analysis.")
+            return
+        q_data[val_col] = pd.to_numeric(q_data[val_col], errors='coerce').fillna(0)
+        breakdown = q_data.groupby(group_cols)[val_col].sum().reset_index()
         
         prompt = f"""
         You are a financial analyst. Analyze the following OPEX data for {self.fiscal_year}.
@@ -193,7 +241,7 @@ class WinOpexDashboard:
         - Previous Quarter: {self.prev_qtr if self.prev_qtr else 'N/A'}
         
         Data Summary (Spend in $M):
-        {breakdown.to_markdown(index=False)}
+        {breakdown.to_string(index=False)}
         
         Please provide a concise "Key Drivers" commentary (bullet points) explaining the financial performance.
         - Highlight major changes between {self.prev_qtr} and {self.latest_qtr}.
@@ -211,13 +259,17 @@ class WinOpexDashboard:
     def render_project_spend_breakdown(self):
         """Renders 'WIN Project Spend' table (Latest Quarter Breakdown)."""
         st.markdown("---")
-        st.markdown(f"### WIN Project Spend ({self.latest_qtr})")
-        
-        # Filter for Latest Quarter
-        df_q = self.df[self.df['fiscal_quarter'] == self.latest_qtr].copy()
-        
+        label = self.latest_qtr if self.latest_qtr != "Unknown" else "All Data"
+        st.markdown(f"### WIN Project Spend ({label})")
+
+        # Filter for Latest Quarter if available, otherwise use full dataset
+        if 'fiscal_quarter' in self.df.columns and self.latest_qtr != "Unknown":
+            df_q = self.df[self.df['fiscal_quarter'] == self.latest_qtr].copy()
+        else:
+            df_q = self.df.copy()
+
         if df_q.empty:
-            st.info(f"No data for {self.latest_qtr}")
+            st.info(f"No data for {label}")
             return
 
         # Define Grouping (HW/SW -> Rollup -> Project)
@@ -254,9 +306,13 @@ class WinOpexDashboard:
     def render_loe_breakdown(self):
         """Renders 'WIN Project LoE' table (Latest Quarter Breakdown)."""
         st.markdown("---")
-        st.markdown(f"### WIN Project LoE ({self.latest_qtr})")
-        
-        df_q = self.df[self.df['fiscal_quarter'] == self.latest_qtr].copy()
+        label = self.latest_qtr if self.latest_qtr != "Unknown" else "All Data"
+        st.markdown(f"### WIN Project LoE ({label})")
+
+        if 'fiscal_quarter' in self.df.columns and self.latest_qtr != "Unknown":
+            df_q = self.df[self.df['fiscal_quarter'] == self.latest_qtr].copy()
+        else:
+            df_q = self.df.copy()
         if 'tm1_mm' not in df_q.columns or df_q.empty:
             st.info("No LoE (PM) data available.")
             return
@@ -336,15 +392,20 @@ class Summary(PageBase):
             else:
                 df = raw_df
 
-            # 3. Determine Latest Fiscal Year
+            # 3. Coerce numeric columns (JSONB values arrive as strings)
+            for num_col in ['ods_mm', 'tm1_mm']:
+                if num_col in df.columns:
+                    df[num_col] = pd.to_numeric(df[num_col], errors='coerce').fillna(0)
+
+            # 4. Determine Latest Fiscal Year
             if 'fiscal_year' in df.columns:
                 df['fiscal_year'] = df['fiscal_year'].astype(str)
                 latest_fy = df['fiscal_year'].max()
-                
-                # 4. Filter for ONLY the latest FY (to show Full Year data)
+
+                # 5. Filter for ONLY the latest FY (to show Full Year data)
                 fy_df = df[df['fiscal_year'] == latest_fy].copy()
                 return latest_fy, fy_df
-            
+
             return "Unknown", df
 
         except Exception as e:
