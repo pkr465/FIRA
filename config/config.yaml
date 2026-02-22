@@ -1,0 +1,103 @@
+# =============================================================================
+# FIRA — Financial Intelligence & Resource Analytics — Configuration
+# =============================================================================
+# This is the main configuration file. All non-secret settings go here.
+# Secrets (API keys, passwords) go in .env — see env.example.
+#
+# Load order: config.yaml → .env (env vars override yaml values)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Paths
+# All data files live OUTSIDE the project in ../files/ :
+#   ../files/opex/       — OpEx Excel files (FY25 Q4 WIN Opex_data.xlsx, etc.)
+#   ../files/resource/   — Resource Planner CSVs (BPAFG, priority_template)
+# -----------------------------------------------------------------------------
+Path:
+  source_path: ../files/opex
+  resource_path: ../files/resource
+  save_path: out
+  out_path: out
+  output_jsonl_path: out/output.jsonl
+
+# -----------------------------------------------------------------------------
+# Excel Data Files
+# -----------------------------------------------------------------------------
+Excel:
+  file_names: FY25 Q4 WIN Opex_data.xlsx, FY25 Q3 WIN Opex_data.xlsx
+
+# -----------------------------------------------------------------------------
+# Worker / Repeat Settings
+# -----------------------------------------------------------------------------
+worker: 1
+repeat: 1
+
+# -----------------------------------------------------------------------------
+# Agent Settings
+# -----------------------------------------------------------------------------
+Agent:
+  API_backend: "xw"
+  APP_backend: "excel"
+  prompt_path: config/prompt.yaml
+  api_doc_path: config/API_document.yaml
+  use_doc_in_syspromt: true
+  use_ext_doc: true
+  use_same_LLM: true
+  use_oracle_API_doc: false
+  add_example_data2feedback: false
+  max_cycle_times: 20
+  max_error_count: 999
+
+# -----------------------------------------------------------------------------
+# QGenie / LLM Settings
+# -----------------------------------------------------------------------------
+# NOTE: api_key is loaded from .env (QGENIE_API_KEY) — do NOT put it here.
+Qgenie:
+  model_name: "qgenie"
+  chat_endpoint: "https://qgenie-chat.qualcomm.com"
+  coding_model_name: "anthropic::claude-4-sonnet"
+  reasoning_model_name: "azure::gpt-5.2"
+
+# -----------------------------------------------------------------------------
+# Model-Specific Settings
+# -----------------------------------------------------------------------------
+Anthropic:
+  model_name: "anthropic::claude-4-sonnet"
+
+Azure:
+  model_name: "azure::gpt-4.1"
+
+Gemini:
+  model_name: "vertexai::gemini-2.5-pro"
+
+# -----------------------------------------------------------------------------
+# Database
+# -----------------------------------------------------------------------------
+Database:
+  database_name: "Postgres"
+
+# -----------------------------------------------------------------------------
+# PostgreSQL / PGVector Settings
+# -----------------------------------------------------------------------------
+# NOTE: admin_password, password should be set in .env, not here.
+Postgres:
+  connection: "postgresql+psycopg2://postgres:postgres@localhost/cnss_opex_db"
+  host: "localhost"
+  port: 5432
+  database: "cnss_opex_db"
+  collection: "cnss_opex_db"
+  collection_tablename: "langchain_pg_collection"
+  embedding_tablename: "langchain_pg_embedding"
+  store_name: "cnss_opex_db"
+
+# -----------------------------------------------------------------------------
+# Streamlit Settings
+# -----------------------------------------------------------------------------
+Streamlit:
+  port: 8507
+
+# -----------------------------------------------------------------------------
+# Feedback
+# -----------------------------------------------------------------------------
+Feedback:
+  email_id: "pavanr@qti.qualcomm.com"

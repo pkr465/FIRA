@@ -1,0 +1,120 @@
+tables:
+  opex_data_hybrid:
+    columns:
+      dept_lead:
+        description:
+          The name of the lead person for the department (e.g., Jones,
+          VK).
+        synonyms:
+          - department lead
+          - lead
+          - manager
+          - head
+      dept_vp:
+        description: The Vice President associated with the department.
+        synonyms:
+          - department vp
+          - vp
+          - vice president
+      fiscal_month:
+        description: The specific fiscal month (e.g., Jul).
+        synonyms:
+          - month
+      fiscal_quarter:
+        description: The fiscal quarter (e.g., Q4).
+        synonyms:
+          - quarter
+          - qtr
+      fiscal_year:
+        description: The fiscal year for the record (e.g., 2025).
+        synonyms:
+          - year
+          - fy
+      home_dept_bu_l2:
+        description: Level 2 Business Unit classification for the home department.
+        synonyms:
+          - bu
+          - business unit
+          - division
+      home_dept_desc:
+        description: Full description or name of the home department.
+        synonyms:
+          - department name
+          - home department
+          - department description
+          - dept desc
+      home_dept_number:
+        description: Unique numeric identifier for the home department.
+        synonyms:
+          - department code
+          - dept id
+          - cost center
+      home_dept_region_r1:
+        description: Primary region code (e.g., USA).
+        synonyms:
+          - region
+          - country
+      home_dept_region_r2:
+        description: Secondary region or city (e.g., San Jose).
+        synonyms:
+          - location
+          - site
+          - city
+      home_dept_vp_rollup_1:
+        description: First level VP hierarchy rollup name.
+        synonyms:
+          - vp rollup 1
+          - executive 1
+      home_dept_vp_rollup_2:
+        description: Second level VP hierarchy rollup name.
+        synonyms:
+          - vp rollup 2
+          - executive 2
+      hw_sw:
+        description: Indicates if the resource is for Hardware (HW) or Software (SW).
+        synonyms:
+          - domain
+          - hardware or software
+          - type
+      ods_mm:
+        description: ODS Man Months; a measure of resource effort.
+        synonyms:
+          - man months
+          - mm
+          - effort
+          - resources
+      proj_rollup:
+        description: Higher-level grouping or rollup category for the project.
+        synonyms:
+          - project group
+          - rollup
+          - program
+      project_desc:
+        description: Description of the project.
+        synonyms:
+          - project name
+          - project
+          - initiative
+      project_number:
+        description: Numeric identifier for the project.
+        synonyms:
+          - project id
+          - project code
+      tech_team:
+        description: The technical team designation.
+        synonyms:
+          - team
+          - tech group
+      tm1_mm:
+        description: TM1 Man Months; alternative measure of resource effort.
+        synonyms:
+          - tm1 effort
+          - tm1
+      version:
+        description: The version of the data (e.g., FY25 Act, Plan, Forecast).
+        synonyms:
+          - scenario
+          - data version
+    description:
+      Operational expense and resource allocation data combining project,
+      department, and financial metrics.

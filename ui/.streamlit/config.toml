@@ -1,0 +1,13 @@
+[theme]
+base = "light"
+primaryColor = "#1B5E20"
+backgroundColor = "#F1F8F1"
+secondaryBackgroundColor = "#E0F0E0"
+textColor = "#1A2E1A"
+font = "sans serif"
+
+[server]
+address = "0.0.0.0"
+port = 8502
+enableCORS = false
+enableStaticServing = true

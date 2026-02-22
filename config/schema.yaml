@@ -1,0 +1,80 @@
+# ==============================================================================
+# SCHEMA DEFINITION FOR THE OPEX DATA TABLE
+# ==============================================================================
+
+table_name: "opex_data_hybrid"
+
+# Configuration for the Vector Column (Used by Python Code)
+vector_config:
+  column_name: "vector"
+  dimension: 1024 # Standard for VertexAI/Gemini. Use 1536 for OpenAI.
+
+# Map: LLM Term -> DB Column
+schema_map:
+  # -- Department --
+  department_id: home_dept_number
+  dept_id: home_dept_number
+  department_number: home_dept_number
+  dept: home_dept_number
+  department_name: home_dept_desc
+  department: home_dept_desc
+
+  # -- Project --
+  project_id: project_number
+  project_number: project_number
+  project_name: project_desc
+  project: project_desc
+
+  # -- Time --
+  fiscal_year: fiscal_year
+  year: fiscal_year
+  quarter: fiscal_quarter
+
+  # -- Metrics / Costs (Requested Updates) --
+  cost: ods_mm
+  spend: ods_mm
+  "type of cost": tm1_mm
+  "cost type": tm1_mm
+  lead: dept_lead
+
+create_table_sql: |
+  CREATE EXTENSION IF NOT EXISTS vector;  -- Ensure extension exists
+
+  CREATE TABLE IF NOT EXISTS {table_name} (
+      id SERIAL PRIMARY KEY,
+      
+      -- === Linkage ID (Critical for Hybrid Search) ===
+      uuid UUID UNIQUE NOT NULL,
+
+      -- === Source Metadata ===
+      source_file TEXT,
+      source_sheet TEXT,
+
+      -- === Promoted Columns ===
+      fiscal_year INTEGER,
+      project_number BIGINT,
+      dept_lead TEXT,
+      hw_sw TEXT,
+      tm1_mm NUMERIC(18, 6),
+      ods_mm NUMERIC(18, 6),
+
+      -- === Vector Embedding Column ===
+      vector vector(1024),
+
+      -- === JSONB bucket ===
+      additional_data JSONB,
+
+      -- === Timestamps ===
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
+indexes_sql:
+  - "CREATE INDEX IF NOT EXISTS idx_hybrid_uuid ON {table_name}(uuid);"
+  - "CREATE INDEX IF NOT EXISTS idx_hybrid_fiscal_year ON {table_name}(fiscal_year);"
+  - "CREATE INDEX IF NOT EXISTS idx_hybrid_project_number ON {table_name}(project_number);"
+  - "CREATE INDEX IF NOT EXISTS idx_hybrid_dept_lead ON {table_name}(dept_lead);"
+  - "CREATE INDEX IF NOT EXISTS idx_hybrid_hw_sw ON {table_name}(hw_sw);"
+  - "CREATE INDEX IF NOT EXISTS idx_hybrid_additional_data ON {table_name} USING GIN(additional_data);"
+  # Vector Similarity Index (IVFFlat is standard for performance)
+  - "CREATE INDEX IF NOT EXISTS idx_hybrid_vector ON {table_name} USING ivfflat (vector vector_cosine_ops) WITH (lists = 100);"
