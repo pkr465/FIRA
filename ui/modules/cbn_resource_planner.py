@@ -315,9 +315,9 @@ class CBNResourcePlanner:
         if demand_df.empty:
             st.warning(
                 "No demand data found in the database. "
-                "Run the parser first: `python -m utils.parsers.cbn_data_parser --data-dir ../files/resource --db postgres`"
+                "Go to the **Data Mgmt** page to upload and ingest your resource planner files, "
+                "or run: `python -m utils.parsers.cbn_data_parser --data-dir ../files/resource --db postgres`"
             )
-            self._render_upload_section()
             return
 
         # --- Initialize session state ---
@@ -848,7 +848,7 @@ class CBNResourcePlanner:
                                        columns=["project_name", "dept_country"] + month_cols)
                 display_df = pd.concat([display_df, gap_row], ignore_index=True)
 
-        # Style the dataframe with Greenback Finance theme
+        # Style the dataframe with FIRA theme
         def _style_table(df):
             """Apply conditional formatting with finance color scheme."""
             styled = df.style.format(

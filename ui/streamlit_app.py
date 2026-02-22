@@ -7,6 +7,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import Existing Modules
+from ui.modules.welcome import Welcome
 from ui.modules.chatbot import ChatBot
 from ui.modules.summary import Summary
 from ui.modules.faq import FAQ
@@ -28,9 +29,10 @@ from ui.modules.data_management import DataManagement
 
 # Define Pages
 PAGES = {
-    "Resource Planner": CBNResourcePlanner(title="FIRA Resource Planner", url="cbn_planner"),
+    "Welcome": Welcome(title="Welcome", url="welcome"),
     "Data Mgmt": DataManagement(title="Data Management", url="data_management"),
-    "Summary": Summary(title="Project Summary", url="summary"),
+    "Resource Planner": CBNResourcePlanner(title="FIRA Resource Planner", url="cbn_planner"),
+    "OpEx Summary": Summary(title="OpEx Summary", url="summary"),
     "Financial Trends": FinancialTrends(title="Financial Trends", url="financial_trends"),
     "Resource Alloc": ResourceAllocation(title="Resource Allocation", url="resource_allocation"),
     "Dept Rollup": DeptRollup(title="Dept Rollup", url="department_rollup"),
@@ -43,7 +45,7 @@ PAGES = {
 }
 
 # Default Page
-DEFAULT_PAGE = PAGES["Resource Planner"].url
+DEFAULT_PAGE = PAGES["Welcome"].url
 DEFAULT_PAGE_URL = DEFAULT_PAGE
 
 def canonical(slug: Optional[str]) -> str:

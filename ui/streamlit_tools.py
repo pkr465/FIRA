@@ -121,8 +121,17 @@ section[data-testid="stSidebar"] .stButton > button:hover {
 section[data-testid="stSidebar"] .stButton > button[kind="primary"],
 section[data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-primary"] {
     background-color: var(--gb-accent) !important;
-    color: #fff !important;
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
     border-color: var(--gb-accent) !important;
+    font-weight: 700 !important;
+}
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] p,
+section[data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-primary"] p,
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] span,
+section[data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-primary"] span {
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
 }
 
 /* --- Expanders --- */
@@ -220,8 +229,16 @@ button[kind="secondary"]:hover {
 button[kind="primary"],
 div.stButton > button[data-testid="stBaseButton-primary"] {
     background-color: var(--gb-accent) !important;
-    color: #fff !important;
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
     border-color: var(--gb-accent) !important;
+}
+button[kind="primary"] p,
+button[kind="primary"] span,
+div.stButton > button[data-testid="stBaseButton-primary"] p,
+div.stButton > button[data-testid="stBaseButton-primary"] span {
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
 }
 button[kind="primary"]:hover {
     background-color: var(--gb-accent-bright) !important;

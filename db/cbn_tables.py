@@ -82,18 +82,27 @@ PRIORITY_TEMPLATE_CREATE_SQL_SQLITE = PRIORITY_TEMPLATE_CREATE_SQL.replace(
 # ---------------------------------------------------------------------------
 
 def load_pg_config(config_path: str = "config/config.yaml") -> dict:
-    """Load Postgres connection params from the project config YAML."""
+    """Load Postgres connection params from the project config YAML + .env overrides."""
+    # Load .env so that POSTGRES_* env vars are available
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config not found: {config_path}")
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
     pg = cfg.get("Postgres", {})
+
+    # Env vars take precedence over YAML values
     return {
-        "host": pg.get("host", "localhost"),
-        "port": pg.get("port", 5432),
-        "database": pg.get("database") or pg.get("dbname", "cnss_opex_db"),
-        "user": pg.get("username") or pg.get("user", "postgres"),
-        "password": pg.get("password", "postgres"),
+        "host": os.environ.get("POSTGRES_HOST") or pg.get("host", "localhost"),
+        "port": int(os.environ.get("POSTGRES_PORT", 0) or pg.get("port", 5432)),
+        "database": os.environ.get("POSTGRES_DB_NAME") or pg.get("database") or pg.get("dbname", "cnss_opex_db"),
+        "user": os.environ.get("POSTGRES_USER") or pg.get("username") or pg.get("user", "postgres"),
+        "password": os.environ.get("POSTGRES_PWD") or os.environ.get("POSTGRES_ADMIN_PWD") or pg.get("password", "postgres"),
     }
 
 
