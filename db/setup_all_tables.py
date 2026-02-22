@@ -298,6 +298,7 @@ class DatabaseBootstrap:
             # (required for CREATE INDEX, TRUNCATE, ALTER TABLE, etc.)
             fira_tables = [
                 "opex_data_hybrid", "bpafg_demand", "priority_template",
+                "headcount_data",
                 "chat_sessions", "chat_messages",
                 "langchain_pg_collection", "langchain_pg_embedding",
             ]
@@ -502,9 +503,6 @@ class DatabaseBootstrap:
         # Step 2: Enable pgvector
         self.ensure_vector_extension()
 
-        # Step 2b: Ensure application user and privileges
-        self.ensure_app_user()
-
         # Step 3: Create / validate tables
         logger.info("\nSetting up tables...")
 
@@ -516,6 +514,11 @@ class DatabaseBootstrap:
 
         logger.info(f"\n[3/3] {PRIORITY_TABLE}")
         self._ensure_table(PRIORITY_TABLE, PRIORITY_CREATE_SQL, PRIORITY_INDEXES_SQL, PRIORITY_EXPECTED_COLUMNS)
+
+        # Step 4: Ensure application user and transfer ownership
+        # IMPORTANT: this must run AFTER tables are created so that
+        # ALTER TABLE ... OWNER TO actually finds the tables.
+        self.ensure_app_user()
 
         # Summary
         logger.info("\n" + "=" * 60)
