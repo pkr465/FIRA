@@ -1,2 +1,3 @@
 .DS_Store
 db/__pycache__/*.pyc
+ui/modules/__pycache__/*.pyc

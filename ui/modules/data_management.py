@@ -535,6 +535,8 @@ class DataManagement(PageBase):
         from sqlalchemy import text
         from utils.models.database import OpexDB
 
+        import pandas as pd
+
         # Normalize column names — strip everything except alphanumeric and underscores
         # (headcount CSVs often have #, /, (), etc. which break SQLAlchemy bind params)
         import re
@@ -556,16 +558,25 @@ class DataManagement(PageBase):
                 seen[name] = 1
         df.columns = clean
 
+        # Detect column types BEFORE None replacement (which can change dtypes)
+        col_types = {}
+        for col in df.columns:
+            dtype = df[col].dtype
+            if pd.api.types.is_integer_dtype(dtype):
+                col_types[col] = "INTEGER"
+            elif pd.api.types.is_float_dtype(dtype):
+                col_types[col] = "DOUBLE PRECISION"
+            elif pd.api.types.is_datetime64_any_dtype(dtype):
+                col_types[col] = "TIMESTAMP"
+            else:
+                col_types[col] = "TEXT"
+
+        # Replace NaN/NaT with None so PostgreSQL receives NULL
+        df = df.where(df.notna(), None)
+
         with OpexDB.engine.begin() as conn:
             # Create table if not exists — dynamic schema from DataFrame
-            cols_sql = []
-            for col in df.columns:
-                if df[col].dtype in ("int64", "int32"):
-                    cols_sql.append(f'"{col}" INTEGER')
-                elif df[col].dtype in ("float64", "float32"):
-                    cols_sql.append(f'"{col}" DOUBLE PRECISION')
-                else:
-                    cols_sql.append(f'"{col}" TEXT')
+            cols_sql = [f'"{col}" {col_types[col]}' for col in df.columns]
 
             create_sql = f"""
                 CREATE TABLE IF NOT EXISTS headcount_data (
