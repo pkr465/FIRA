@@ -98,6 +98,12 @@ class DataManagement(PageBase):
             "OpEx Excel files are converted to JSONL, embedded via QGenie, "
             "and stored in `opex_data_hybrid` with vector similarity support."
         )
+        st.info(
+            "**Note:** Re-uploading the same file is safe — duplicate records are "
+            "automatically detected by content hash and skipped. Only new or changed "
+            "records are added.",
+            icon="ℹ️",
+        )
 
         # Upload
         uploaded = st.file_uploader(
@@ -222,6 +228,12 @@ class DataManagement(PageBase):
             "Resource Planner CSVs are parsed and stored in PostgreSQL tables "
             "(`bpafg_demand`, `priority_template`) for SQL analytics and the Resource Planner visualization."
         )
+        st.info(
+            "**Note:** Uploading new files **replaces** existing data in each table "
+            "(demand or priority). This prevents duplicate rows when re-uploading "
+            "updated files. The file on disk is also overwritten if it has the same name.",
+            icon="ℹ️",
+        )
 
         col1, col2 = st.columns(2)
         with col1:
@@ -268,7 +280,11 @@ class DataManagement(PageBase):
             self._run_rp_reingest()
 
     def _ingest_rp_uploaded(self, demand_file, priority_file):
-        """Parse and ingest uploaded resource planner files."""
+        """Parse and ingest uploaded resource planner files.
+
+        Uses truncate-before-insert to prevent duplicate rows when
+        the same file (or a replacement) is re-uploaded.
+        """
         from utils.parsers.cbn_data_parser import (
             parse_bpafg_demand, parse_priority_template,
             insert_bpafg_to_db, insert_priority_to_db,
@@ -290,10 +306,10 @@ class DataManagement(PageBase):
                     with open(save_path, "wb") as f:
                         f.write(demand_file.read())
                     demand_file.seek(0)
-                    st.write(f"File uploaded. Parsing demand data...")
+                    st.write("Clearing existing demand data and re-ingesting...")
                     df = parse_bpafg_demand(save_path)
-                    n = insert_bpafg_to_db(df, cur, use_postgres=True)
-                    st.write(f"Ingested **{n}** demand rows.")
+                    n = insert_bpafg_to_db(df, cur, use_postgres=True, truncate_first=True)
+                    st.write(f"Replaced demand data with **{n}** rows from `{demand_file.name}`.")
 
                 if priority_file:
                     st.write(f"Saving `{priority_file.name}` to `files/resource/`...")
@@ -301,10 +317,10 @@ class DataManagement(PageBase):
                     with open(save_path, "wb") as f:
                         f.write(priority_file.read())
                     priority_file.seek(0)
-                    st.write(f"File uploaded. Parsing priority data...")
+                    st.write("Clearing existing priority data and re-ingesting...")
                     df = parse_priority_template(save_path)
-                    n = insert_priority_to_db(df, cur, use_postgres=True)
-                    st.write(f"Ingested **{n}** priority rows.")
+                    n = insert_priority_to_db(df, cur, use_postgres=True, truncate_first=True)
+                    st.write(f"Replaced priority data with **{n}** rows from `{priority_file.name}`.")
 
                 conn.commit()
                 st.cache_data.clear()
@@ -319,7 +335,7 @@ class DataManagement(PageBase):
                 conn.close()
 
     def _run_rp_reingest(self):
-        """Re-ingest all files from ../files/resource/."""
+        """Re-ingest all files from ../files/resource/ (truncates tables first)."""
         with st.status("Re-ingesting resource planner data from files/resource/...", expanded=True) as status:
             try:
                 from utils.parsers.cbn_data_parser import ingest_all
@@ -332,10 +348,11 @@ class DataManagement(PageBase):
 
                 conn = get_pg_connection()
                 try:
-                    st.write("Parsing and ingesting files...")
-                    n = ingest_all(resource_dir, conn.cursor(), use_postgres=True)
+                    st.write("Clearing existing data and re-ingesting all files...")
+                    n = ingest_all(resource_dir, conn.cursor(), use_postgres=True,
+                                   truncate_first=True)
                     conn.commit()
-                    st.write(f"Ingested **{n}** total rows.")
+                    st.write(f"Replaced all resource planner data with **{n}** total rows.")
                     st.cache_data.clear()
                     status.update(label=f"Re-ingested {n} rows from files/resource/", state="complete")
                 finally:
@@ -353,6 +370,11 @@ class DataManagement(PageBase):
         st.markdown(
             "Upload headcount data files (CSV/XLSX) for workforce analytics. "
             "Data is stored in the `headcount_data` table in PostgreSQL."
+        )
+        st.info(
+            "**Note:** Uploading new files **replaces** all existing headcount data "
+            "to prevent duplicate rows. The file on disk is also overwritten if it has the same name.",
+            icon="ℹ️",
         )
 
         uploaded = st.file_uploader(
@@ -392,7 +414,8 @@ class DataManagement(PageBase):
             self._run_headcount_reingest()
 
     def _ingest_headcount_uploaded(self, uploaded_files):
-        """Save and ingest headcount CSV/XLSX files."""
+        """Save and ingest headcount CSV/XLSX files.
+        Truncates existing data before first file to prevent duplicates."""
         import pandas as pd
 
         hc_dir = os.path.join("..", "files", "headcount")
@@ -401,7 +424,8 @@ class DataManagement(PageBase):
         with st.status("Ingesting headcount data...", expanded=True) as status:
             try:
                 total_rows = 0
-                for f in uploaded_files:
+                st.write("Clearing existing headcount data and re-ingesting...")
+                for i, f in enumerate(uploaded_files):
                     # Save file
                     save_path = os.path.join(hc_dir, f.name)
                     with open(save_path, "wb") as out:
@@ -417,13 +441,13 @@ class DataManagement(PageBase):
 
                     st.write(f"Parsed {len(df)} rows, {len(df.columns)} columns from `{f.name}`")
 
-                    # Ingest to PostgreSQL
-                    n = self._insert_headcount_to_db(df)
+                    # Truncate only before first file
+                    n = self._insert_headcount_to_db(df, truncate_first=(i == 0))
                     total_rows += n
                     st.write(f"Ingested **{n}** rows from `{f.name}`")
 
                 st.cache_data.clear()
-                status.update(label=f"Headcount: {total_rows} total rows ingested!", state="complete")
+                status.update(label=f"Headcount: replaced with {total_rows} total rows!", state="complete")
 
             except Exception as e:
                 status.update(label="Headcount ingestion failed!", state="error")
@@ -431,7 +455,7 @@ class DataManagement(PageBase):
                 logger.exception(e)
 
     def _run_headcount_reingest(self):
-        """Re-ingest all headcount files from ../files/headcount/."""
+        """Re-ingest all headcount files from ../files/headcount/ (truncates first)."""
         import pandas as pd
 
         hc_dir = os.path.join("..", "files", "headcount")
@@ -448,19 +472,21 @@ class DataManagement(PageBase):
                     status.update(label="No files found", state="error")
                     return
 
-                for fname in files:
+                st.write("Clearing existing headcount data and re-ingesting all files...")
+                for i, fname in enumerate(files):
                     fpath = os.path.join(hc_dir, fname)
                     st.write(f"Processing `{fname}`...")
                     if fname.endswith(".csv"):
                         df = pd.read_csv(fpath)
                     else:
                         df = pd.read_excel(fpath)
-                    n = self._insert_headcount_to_db(df)
+                    # Truncate only before first file
+                    n = self._insert_headcount_to_db(df, truncate_first=(i == 0))
                     total_rows += n
                     st.write(f"Ingested **{n}** rows from `{fname}`")
 
                 st.cache_data.clear()
-                status.update(label=f"Re-ingested {total_rows} headcount rows", state="complete")
+                status.update(label=f"Replaced headcount data with {total_rows} rows", state="complete")
 
             except Exception as e:
                 status.update(label="Re-ingestion failed!", state="error")
@@ -468,9 +494,14 @@ class DataManagement(PageBase):
                 logger.exception(e)
 
     @staticmethod
-    def _insert_headcount_to_db(df) -> int:
+    def _insert_headcount_to_db(df, truncate_first: bool = False) -> int:
         """Insert a headcount DataFrame into the headcount_data table.
-        Creates the table dynamically based on the DataFrame columns."""
+        Creates the table dynamically based on the DataFrame columns.
+
+        Args:
+            truncate_first: If True, truncate existing data before inserting
+                to prevent duplicate rows on re-upload.
+        """
         from sqlalchemy import text
         from utils.models.database import OpexDB
 
@@ -495,6 +526,10 @@ class DataManagement(PageBase):
                 )
             """
             conn.execute(text(create_sql))
+
+            # Truncate before inserting to prevent duplicates
+            if truncate_first:
+                conn.execute(text("TRUNCATE TABLE headcount_data RESTART IDENTITY"))
 
             # Insert rows
             if not df.empty:

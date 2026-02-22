@@ -290,18 +290,41 @@ class DatabaseBootstrap:
 
             # Grant privileges: CONNECT, schema usage, and table-level access
             cur.execute(f'GRANT CONNECT ON DATABASE "{db_name}" TO "{app_user}"')
-            cur.execute(f'GRANT USAGE ON SCHEMA public TO "{app_user}"')
-            cur.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{app_user}"')
-            cur.execute(f'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "{app_user}"')
+            cur.execute(f'GRANT USAGE, CREATE ON SCHEMA public TO "{app_user}"')
+            cur.execute(f'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "{app_user}"')
+            cur.execute(f'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "{app_user}"')
+
+            # Transfer ownership of existing FIRA tables to the app user
+            # (required for CREATE INDEX, TRUNCATE, ALTER TABLE, etc.)
+            fira_tables = [
+                "opex_data_hybrid", "bpafg_demand", "priority_template",
+                "chat_sessions", "chat_messages",
+                "langchain_pg_collection", "langchain_pg_embedding",
+            ]
+            for table in fira_tables:
+                try:
+                    cur.execute(f'ALTER TABLE IF EXISTS {table} OWNER TO "{app_user}"')
+                except Exception:
+                    pass  # table may not exist yet — that's OK
+
+            # Transfer ownership of sequences too
+            cur.execute("""
+                SELECT sequencename FROM pg_sequences WHERE schemaname = 'public'
+            """)
+            for row in cur.fetchall():
+                try:
+                    cur.execute(f'ALTER SEQUENCE {row[0]} OWNER TO "{app_user}"')
+                except Exception:
+                    pass
 
             # Set default privileges so future tables are also accessible
             cur.execute(
                 f'ALTER DEFAULT PRIVILEGES IN SCHEMA public '
-                f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{app_user}"'
+                f'GRANT ALL PRIVILEGES ON TABLES TO "{app_user}"'
             )
             cur.execute(
                 f'ALTER DEFAULT PRIVILEGES IN SCHEMA public '
-                f'GRANT USAGE, SELECT ON SEQUENCES TO "{app_user}"'
+                f'GRANT ALL PRIVILEGES ON SEQUENCES TO "{app_user}"'
             )
 
             conn.commit()

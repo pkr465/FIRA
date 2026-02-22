@@ -288,11 +288,32 @@ def parse_priority_template(filepath: str) -> pd.DataFrame:
 # Database insertion
 # ---------------------------------------------------------------------------
 
-def insert_bpafg_to_db(df: pd.DataFrame, cursor, use_postgres: bool = True):
-    """Insert BPAFG demand data into the bpafg_demand table."""
+def truncate_bpafg(cursor, use_postgres: bool = True):
+    """Truncate the bpafg_demand table (remove all rows)."""
+    cursor.execute("TRUNCATE TABLE bpafg_demand" if use_postgres else "DELETE FROM bpafg_demand")
+    logger.info("Truncated bpafg_demand table.")
+
+
+def truncate_priority(cursor, use_postgres: bool = True):
+    """Truncate the priority_template table (remove all rows)."""
+    cursor.execute("TRUNCATE TABLE priority_template" if use_postgres else "DELETE FROM priority_template")
+    logger.info("Truncated priority_template table.")
+
+
+def insert_bpafg_to_db(df: pd.DataFrame, cursor, use_postgres: bool = True,
+                        truncate_first: bool = False):
+    """Insert BPAFG demand data into the bpafg_demand table.
+
+    Args:
+        truncate_first: If True, truncate the table before inserting.
+            Use this on re-upload to prevent duplicate rows.
+    """
     if df.empty:
         logger.warning("No BPAFG data to insert.")
         return 0
+
+    if truncate_first:
+        truncate_bpafg(cursor, use_postgres)
 
     placeholder = "%s" if use_postgres else "?"
 
@@ -318,11 +339,20 @@ def insert_bpafg_to_db(df: pd.DataFrame, cursor, use_postgres: bool = True):
     return len(rows)
 
 
-def insert_priority_to_db(df: pd.DataFrame, cursor, use_postgres: bool = True):
-    """Insert priority template data into the priority_template table."""
+def insert_priority_to_db(df: pd.DataFrame, cursor, use_postgres: bool = True,
+                          truncate_first: bool = False):
+    """Insert priority template data into the priority_template table.
+
+    Args:
+        truncate_first: If True, truncate the table before inserting.
+            Use this on re-upload to prevent duplicate rows.
+    """
     if df.empty:
         logger.warning("No priority data to insert.")
         return 0
+
+    if truncate_first:
+        truncate_priority(cursor, use_postgres)
 
     placeholder = "%s" if use_postgres else "?"
 
@@ -355,27 +385,39 @@ def insert_priority_to_db(df: pd.DataFrame, cursor, use_postgres: bool = True):
 # High-level ingest functions
 # ---------------------------------------------------------------------------
 
-def ingest_bpafg_file(filepath: str, cursor, use_postgres: bool = True) -> int:
+def ingest_bpafg_file(filepath: str, cursor, use_postgres: bool = True,
+                      truncate_first: bool = False) -> int:
     """Parse + insert a BPAFG demand file."""
     df = parse_bpafg_demand(filepath)
-    return insert_bpafg_to_db(df, cursor, use_postgres)
+    return insert_bpafg_to_db(df, cursor, use_postgres, truncate_first=truncate_first)
 
 
-def ingest_priority_file(filepath: str, cursor, use_postgres: bool = True) -> int:
+def ingest_priority_file(filepath: str, cursor, use_postgres: bool = True,
+                         truncate_first: bool = False) -> int:
     """Parse + insert a priority template file."""
     df = parse_priority_template(filepath)
-    return insert_priority_to_db(df, cursor, use_postgres)
+    return insert_priority_to_db(df, cursor, use_postgres, truncate_first=truncate_first)
 
 
-def ingest_all(data_dir: str = "../files/resource", cursor=None, use_postgres: bool = True):
+def ingest_all(data_dir: str = "../files/resource", cursor=None,
+               use_postgres: bool = True, truncate_first: bool = True):
     """
     Scan data_dir for BPAFG and priority files, parse and ingest them.
     Recognises files by name patterns.
+
+    Args:
+        truncate_first: If True (default), truncate each table before
+            inserting to prevent duplicate rows on re-upload.
     """
     data_path = Path(data_dir)
     if not data_path.exists():
         logger.error(f"Data directory not found: {data_dir}")
         return
+
+    # Track whether we've already truncated each table (only truncate once,
+    # before the first file of each type)
+    bpafg_truncated = False
+    priority_truncated = False
 
     total = 0
     for fpath in sorted(data_path.glob("*")):
@@ -386,10 +428,16 @@ def ingest_all(data_dir: str = "../files/resource", cursor=None, use_postgres: b
         name_lower = fpath.name.lower()
         if "bpafg" in name_lower:
             logger.info(f"Ingesting BPAFG file: {fpath.name}")
-            total += ingest_bpafg_file(str(fpath), cursor, use_postgres)
+            should_truncate = truncate_first and not bpafg_truncated
+            total += ingest_bpafg_file(str(fpath), cursor, use_postgres,
+                                       truncate_first=should_truncate)
+            bpafg_truncated = True
         elif "priority" in name_lower:
             logger.info(f"Ingesting Priority file: {fpath.name}")
-            total += ingest_priority_file(str(fpath), cursor, use_postgres)
+            should_truncate = truncate_first and not priority_truncated
+            total += ingest_priority_file(str(fpath), cursor, use_postgres,
+                                          truncate_first=should_truncate)
+            priority_truncated = True
         else:
             logger.debug(f"Skipping unrecognised file: {fpath.name}")
 

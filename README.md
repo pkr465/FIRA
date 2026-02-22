@@ -270,17 +270,24 @@ CREATE DATABASE cnss_opex_db OWNER postgres;
 -- Enable pgvector extension (requires superuser)
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Grant privileges to the application user
+-- Grant full privileges to the application user
 GRANT CONNECT ON DATABASE cnss_opex_db TO fira_user;
-GRANT USAGE ON SCHEMA public TO fira_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO fira_user;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO fira_user;
+GRANT USAGE, CREATE ON SCHEMA public TO fira_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO fira_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO fira_user;
+
+-- Transfer ownership of FIRA tables (needed for CREATE INDEX, TRUNCATE)
+ALTER TABLE IF EXISTS opex_data_hybrid OWNER TO fira_user;
+ALTER TABLE IF EXISTS bpafg_demand OWNER TO fira_user;
+ALTER TABLE IF EXISTS priority_template OWNER TO fira_user;
+ALTER TABLE IF EXISTS chat_sessions OWNER TO fira_user;
+ALTER TABLE IF EXISTS chat_messages OWNER TO fira_user;
 
 -- Ensure future tables are also accessible
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO fira_user;
+  GRANT ALL PRIVILEGES ON TABLES TO fira_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO fira_user;
+  GRANT ALL PRIVILEGES ON SEQUENCES TO fira_user;
 
 \q
 ```
