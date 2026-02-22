@@ -1,3 +1,24 @@
+# Byte-compiled / cached Python files
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
 .DS_Store
-db/__pycache__/*.pyc
-ui/modules/__pycache__/*.pyc
+
+# Environment
+.env
+.default.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Python virtual environment
+.venv/
+venv/
+
+# Output / temp
+out/
+*.log

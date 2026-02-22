@@ -571,8 +571,31 @@ class DataManagement(PageBase):
             else:
                 col_types[col] = "TEXT"
 
-        # Replace NaN/NaT with None so PostgreSQL receives NULL
-        df = df.where(df.notna(), None)
+        # Convert DataFrame to records and scrub ALL null-like values to Python None.
+        # pandas NaT, NaN, numpy.nan survive df.where() and to_dict() as objects
+        # that PostgreSQL rejects as literal strings 'NaT' / 'NaN'.
+        import numpy as np
+        import math
+
+        def _scrub_value(v):
+            """Convert any null-like value to None for safe SQL insertion."""
+            if v is None:
+                return None
+            if isinstance(v, float) and (math.isnan(v) or np.isnan(v)):
+                return None
+            if isinstance(v, type(pd.NaT)):
+                return None
+            if hasattr(v, 'isoformat'):
+                # Convert pandas Timestamp / datetime to Python datetime for psycopg2
+                try:
+                    return v.to_pydatetime() if hasattr(v, 'to_pydatetime') else v
+                except Exception:
+                    return str(v)
+            return v
+
+        records = []
+        for row_dict in df.to_dict(orient="records"):
+            records.append({k: _scrub_value(v) for k, v in row_dict.items()})
 
         with OpexDB.engine.begin() as conn:
             # Create table if not exists — dynamic schema from DataFrame
@@ -591,14 +614,13 @@ class DataManagement(PageBase):
                 conn.execute(text("TRUNCATE TABLE headcount_data RESTART IDENTITY"))
 
             # Insert rows
-            if not df.empty:
+            if records:
                 col_names = ', '.join([f'"{c}"' for c in df.columns])
                 placeholders = ', '.join([f':{c}' for c in df.columns])
                 insert_sql = f"INSERT INTO headcount_data ({col_names}) VALUES ({placeholders})"
-                records = df.to_dict(orient="records")
                 conn.execute(text(insert_sql), records)
 
-        return len(df)
+        return len(records)
 
     # =====================================================================
     # Shared helpers
