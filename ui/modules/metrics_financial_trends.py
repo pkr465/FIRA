@@ -13,10 +13,9 @@ class FinancialTrendsDashboard:
         self.df = df.copy()
 
         # Coerce key numeric columns (JSONB values may arrive as strings)
-        # and scale to $M (raw values are ~100x larger than display units)
         for col in ['ods_mm', 'tm1_mm']:
             if col in self.df.columns:
-                self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0) / 100.0
+                self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
 
         # Sort months fiscally (Oct start)
         self.month_order = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar',
