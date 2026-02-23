@@ -7,8 +7,9 @@ Drops ALL FIRA tables in dependency-safe order:
   3. opex_data_hybrid
   4. bpafg_demand
   5. priority_template
-  6. langchain_pg_embedding
-  7. langchain_pg_collection
+  6. headcount_data
+  7. langchain_pg_embedding
+  8. langchain_pg_collection
 
 Usage:
     python db/drop_db.py                     # interactive confirmation
@@ -33,6 +34,7 @@ TARGET_TABLES = [
     "opex_data_hybrid",
     "bpafg_demand",
     "priority_template",
+    "headcount_data",
     "langchain_pg_embedding",
     "langchain_pg_collection",
 ]
