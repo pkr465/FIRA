@@ -417,10 +417,24 @@ class DatabaseBootstrap:
         finally:
             conn.close()
 
+    # -- mapping from expected type names to SQL types for ALTER TABLE ------
+
+    _TYPE_TO_SQL = {
+        "integer":                       "INTEGER",
+        "bigint":                        "BIGINT",
+        "text":                          "TEXT",
+        "numeric":                       "NUMERIC",
+        "jsonb":                         "JSONB",
+        "uuid":                          "UUID",
+        "user-defined":                  "vector(1024)",
+        "timestamp without time zone":   "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "timestamp with time zone":      "TIMESTAMPTZ DEFAULT NOW()",
+    }
+
     def _validate_schema(
         self, cursor, table_name: str, expected_columns: Dict[str, str]
     ) -> None:
-        """Compare actual columns against expected; report mismatches."""
+        """Compare actual columns against expected; auto-add missing columns."""
         cursor.execute(
             """
             SELECT column_name, data_type
@@ -432,12 +446,28 @@ class DatabaseBootstrap:
         )
         actual = {row[0]: row[1] for row in cursor.fetchall()}
 
-        # Check for missing columns
+        # Check for missing columns — auto-add them
         for col, expected_type in expected_columns.items():
             if col not in actual:
-                issue = f"  ⚠️  [{table_name}] Missing column: '{col}' (expected {expected_type})"
-                logger.warning(issue)
-                self.issues.append(issue)
+                sql_type = self._TYPE_TO_SQL.get(expected_type.lower(), "TEXT")
+
+                # Special defaults for known columns
+                default_clause = ""
+                if col == "data_type":
+                    default_clause = " DEFAULT 'dollar'"
+
+                alter_sql = (
+                    f'ALTER TABLE {table_name} ADD COLUMN "{col}" {sql_type}{default_clause}'
+                )
+                try:
+                    cursor.execute(alter_sql)
+                    logger.info(f"  ✅ [{table_name}] Added missing column: '{col}' ({sql_type})")
+                except Exception as e:
+                    issue = (
+                        f"  ❌ [{table_name}] Failed to add column '{col}': {e}"
+                    )
+                    logger.error(issue)
+                    self.issues.append(issue)
             else:
                 actual_type = actual[col]
                 # Flexible type comparison (e.g., "numeric" matches "numeric")
