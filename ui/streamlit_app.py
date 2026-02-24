@@ -6,6 +6,9 @@ from typing import Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Import Auth
+from ui.modules.auth import login_page
+
 # Import Existing Modules
 from ui.modules.welcome import Welcome
 from ui.modules.chatbot import ChatBot
@@ -76,6 +79,10 @@ def main():
         app_css()
     except Exception:
         pass
+
+    # Auth Gate — must sign in before accessing the app
+    if not login_page():
+        return
 
     # 1. Router Logic
     query_params = st.query_params
