@@ -116,8 +116,14 @@ class DataIngestionAgent:
 
         return "\n".join(lines)
 
-    def process_jsonl(self, file_path: str):
-        """Reads JSONL, creates Documents, and ingests them."""
+    def process_jsonl(self, file_path: str, force: bool = False):
+        """Reads JSONL, creates Documents, and ingests them.
+
+        Args:
+            file_path: Path to the JSONL file.
+            force: If True, re-ingest all records even if they already exist
+                   (uses UPSERT to update existing rows with correct column values).
+        """
         logger.info(f"Reading data from {file_path}...")
         
         documents = []
@@ -165,7 +171,7 @@ class DataIngestionAgent:
 
             if documents:
                 logger.info(f"Prepared {len(documents)} documents. Starting ingestion...")
-                self.vector_store.add_documents(documents)
+                self.vector_store.add_documents(documents, force=force)
             else:
                 logger.warning("No valid documents found to ingest.")
                 
@@ -177,8 +183,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ingest JSONL data into Vector Store.")
     parser.add_argument("--file", default="out/output.jsonl", help="Path to input JSONL file")
     parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
-    
+    parser.add_argument("--force", action="store_true",
+                        help="Force re-ingest all records (UPSERT), even if they already exist. "
+                             "Use after schema changes to update column mappings.")
+
     args = parser.parse_args()
-    
+
     agent = DataIngestionAgent(config_path=args.config)
-    agent.process_jsonl(args.file)
+    agent.process_jsonl(args.file, force=args.force)

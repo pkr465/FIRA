@@ -221,7 +221,7 @@ class DataManagement(PageBase):
             self._ingest_opex_uploaded(uploaded)
 
         if reingest:
-            self._run_opex_pipeline()
+            self._run_opex_pipeline(force=True)
 
     def _ingest_opex_uploaded(self, uploaded_files):
         """Save uploaded Excel files to ../files/opex/ then run the full pipeline."""
@@ -244,10 +244,15 @@ class DataManagement(PageBase):
         # Run the full pipeline
         self._run_opex_pipeline(extra_files=saved_names)
 
-    def _run_opex_pipeline(self, extra_files=None):
+    def _run_opex_pipeline(self, extra_files=None, force: bool = False):
         """
         Run the OpEx pipeline: DB bootstrap → Excel→JSONL → vector ingestion.
         Uses the same logic as main.py / data_pipeline.py.
+
+        Args:
+            extra_files: Additional Excel file names to process.
+            force: If True, re-ingest all records even if they already exist
+                   (UPSERT updates existing rows with corrected column values).
         """
         with st.status("Running OpEx ingestion pipeline...", expanded=True) as status:
             try:
@@ -287,8 +292,9 @@ class DataManagement(PageBase):
                     st.write("No JSONL files found to ingest. Check Excel file names in config.yaml.")
                 else:
                     for jp in files_to_ingest:
-                        st.write(f"Ingesting `{jp.name}`...")
-                        agent.process_jsonl(str(jp))
+                        mode = "force re-ingesting" if force else "ingesting"
+                        st.write(f"{'🔄' if force else '📥'} {mode.capitalize()} `{jp.name}`...")
+                        agent.process_jsonl(str(jp), force=force)
                         st.write(f"`{jp.name}` ingested.")
 
                 status.update(label="OpEx pipeline completed successfully!", state="complete")

@@ -13,7 +13,7 @@ from agents.data_ingestion_agent import DataIngestionAgent
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-def run_pipeline(config_path="config/config.yaml", sheet_name=None):
+def run_pipeline(config_path="config/config.yaml", sheet_name=None, force: bool = False):
     """
     Executes the data pipeline: DB setup, Excel conversion, and Vector ingestion.
     """
@@ -85,7 +85,7 @@ def run_pipeline(config_path="config/config.yaml", sheet_name=None):
                 
             logger.info(f"📥 Ingesting: {jsonl_path.name}")
             try:
-                agent.process_jsonl(str(jsonl_path))
+                agent.process_jsonl(str(jsonl_path), force=force)
                 success_count += 1
             except Exception as e:
                 logger.error(f"❌ Failed to ingest {jsonl_path.name}: {e}")
@@ -107,5 +107,12 @@ def run_pipeline(config_path="config/config.yaml", sheet_name=None):
     logger.info("==========================================")
 
 if __name__ == "__main__":
-    # Ensure this matches your actual config location
-    run_pipeline("config/config.yaml")
+    import argparse
+    parser = argparse.ArgumentParser(description="FIRA Data Pipeline")
+    parser.add_argument("--config", default="config/config.yaml", help="Path to config.yaml")
+    parser.add_argument("--sheet", default=None, help="Specific sheet to process")
+    parser.add_argument("--force", action="store_true",
+                        help="Force re-ingest all records even if they already exist. "
+                             "Use after schema/column changes.")
+    args = parser.parse_args()
+    run_pipeline(args.config, sheet_name=args.sheet, force=args.force)

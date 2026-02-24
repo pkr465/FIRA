@@ -71,7 +71,7 @@ class PostgresVectorStore:
 
         return existing_ids
 
-    def add_documents(self, documents: List[Document], batch_size: int = 500):
+    def add_documents(self, documents: List[Document], batch_size: int = 500, force: bool = False):
         if not documents:
             return
 
@@ -86,21 +86,27 @@ class PostgresVectorStore:
             unique_docs_map[doc_id] = doc
 
         deduped_docs = list(unique_docs_map.values())
-        
-        # 2. Database Deduplication (Check Hybrid Table)
-        all_ids = list(unique_docs_map.keys())
-        existing_ids = set()
-        
-        chk_size = 1000
-        for i in range(0, len(all_ids), chk_size):
-            id_chunk = all_ids[i : i + chk_size]
-            existing_ids.update(self._fetch_existing_uuids(id_chunk))
 
-        new_docs = [doc for doc in deduped_docs if doc.metadata["id"] not in existing_ids]
+        if force:
+            # Force mode: skip DB dedup check, let UPSERT handle everything.
+            # Used when schema changes require re-ingesting existing data.
+            new_docs = deduped_docs
+            logger.info(f"🔄 Force mode: re-ingesting all {len(new_docs)} documents (UPSERT will update existing)...")
+        else:
+            # 2. Database Deduplication (Check Hybrid Table)
+            all_ids = list(unique_docs_map.keys())
+            existing_ids = set()
 
-        if not new_docs:
-            logger.info("✅ All documents already exist. Skipping.")
-            return
+            chk_size = 1000
+            for i in range(0, len(all_ids), chk_size):
+                id_chunk = all_ids[i : i + chk_size]
+                existing_ids.update(self._fetch_existing_uuids(id_chunk))
+
+            new_docs = [doc for doc in deduped_docs if doc.metadata["id"] not in existing_ids]
+
+            if not new_docs:
+                logger.info("✅ All documents already exist. Skipping. (Use force=True to re-ingest)")
+                return
 
         logger.info(f"🚀 Ingesting {len(new_docs)} new documents into '{self.table_name}'...")
 
