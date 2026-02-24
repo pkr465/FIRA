@@ -107,7 +107,7 @@ class GeoOrgMetrics(PageBase):
                 
                 # VP & Spend
                 vp_col = get_col(['homedeptvprollup1', 'homedeptvprollup2', 'homedeptvp', 'vpname'])
-                ods_col = get_col(['odsmm', 'ods', 'spend'])
+                ods_col = get_col(['odsm', 'ods', 'spend'])
                 
                 # 4. Process Data
                 # Country (R1)
@@ -131,11 +131,11 @@ class GeoOrgMetrics(PageBase):
                     df['VP_Name'] = 'Unknown'
                 
                 # Metrics
-                target_ods = ods_col if ods_col else 'ods_mm'
+                target_ods = ods_col if ods_col else 'ods_m'
                 if target_ods in df.columns:
-                    df['ods_mm'] = pd.to_numeric(df[target_ods], errors='coerce').fillna(0)
+                    df['ods_m'] = pd.to_numeric(df[target_ods], errors='coerce').fillna(0)
                 else:
-                    df['ods_mm'] = 0.0
+                    df['ods_m'] = 0.0
 
                 return df
             return raw
@@ -173,20 +173,20 @@ class GeoOrgMetrics(PageBase):
             st.caption("Spend Concentration by Country (Source: Home Dept Region R1)")
 
             if 'ISO3' in df.columns:
-                geo_agg = df.groupby(['ISO3', 'Country_Label'])['ods_mm'].sum().reset_index()
-                geo_agg = geo_agg[geo_agg['ods_mm'].abs() > 0.001]
+                geo_agg = df.groupby(['ISO3', 'Country_Label'])['ods_m'].sum().reset_index()
+                geo_agg = geo_agg[geo_agg['ods_m'].abs() > 0.001]
 
                 if not geo_agg.empty:
                     # Fix for single value color scaling
-                    z_min = geo_agg['ods_mm'].min()
-                    z_max = geo_agg['ods_mm'].max()
+                    z_min = geo_agg['ods_m'].min()
+                    z_max = geo_agg['ods_m'].max()
                     if z_min == z_max:
                         z_min = 0
                     
                     fig_map = go.Figure(data=go.Choropleth(
                         locations=geo_agg['ISO3'],
                         locationmode='ISO-3',
-                        z=geo_agg['ods_mm'],
+                        z=geo_agg['ods_m'],
                         text=geo_agg['Country_Label'],
                         colorscale='Blues',
                         zmin=z_min, 
@@ -217,16 +217,16 @@ class GeoOrgMetrics(PageBase):
             st.caption("Spend by Site/City (Source: Home Dept Region R2)")
             
             if 'Location_Label' in df.columns:
-                loc_agg = df.groupby('Location_Label')['ods_mm'].sum().sort_values(ascending=False).reset_index()
-                loc_agg = loc_agg[loc_agg['ods_mm'].abs() > 0.001]
+                loc_agg = df.groupby('Location_Label')['ods_m'].sum().sort_values(ascending=False).reset_index()
+                loc_agg = loc_agg[loc_agg['ods_m'].abs() > 0.001]
                 
                 if not loc_agg.empty:
                     # Display as a horizontal bar chart
                     fig_loc = go.Figure(go.Bar(
-                        x=loc_agg['ods_mm'],
+                        x=loc_agg['ods_m'],
                         y=loc_agg['Location_Label'],
                         orientation='h',
-                        text=loc_agg['ods_mm'].apply(lambda x: f"${x:,.2f}M"),
+                        text=loc_agg['ods_m'].apply(lambda x: f"${x:,.2f}M"),
                         textposition='auto',
                         marker_color='#00CC96'
                     ))
@@ -247,15 +247,15 @@ class GeoOrgMetrics(PageBase):
             st.caption("Total Spend by VP Rollup")
 
             if 'VP_Name' in df.columns:
-                vp_agg = df.groupby('VP_Name')['ods_mm'].sum().sort_values(ascending=True).reset_index()
-                vp_agg = vp_agg[vp_agg['ods_mm'].abs() > 0.01]
+                vp_agg = df.groupby('VP_Name')['ods_m'].sum().sort_values(ascending=True).reset_index()
+                vp_agg = vp_agg[vp_agg['ods_m'].abs() > 0.01]
 
                 if not vp_agg.empty:
                     fig_vp = go.Figure(go.Bar(
-                        x=vp_agg['ods_mm'],
+                        x=vp_agg['ods_m'],
                         y=vp_agg['VP_Name'],
                         orientation='h',
-                        text=vp_agg['ods_mm'].apply(lambda x: f"${x:,.1f}M"),
+                        text=vp_agg['ods_m'].apply(lambda x: f"${x:,.1f}M"),
                         textposition='auto',
                         marker_color='#636EFA'
                     ))

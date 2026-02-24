@@ -63,7 +63,8 @@ class SandboxPage(PageBase):
                 return
 
             # Coerce known numeric columns (JSONB values arrive as strings)
-            for col in ['ods_mm', 'tm1_mm']:
+            # Support both dollar and man-month data columns
+            for col in ['ods_m', 'tm1_m', 'ods_mm', 'tm1_mm']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
@@ -92,7 +93,10 @@ class SandboxPage(PageBase):
             with col2:
                 x_axis = st.selectbox("X Axis", all_cols, index=all_cols.index('fiscal_month') if 'fiscal_month' in all_cols else 0)
             with col3:
-                y_axis = st.selectbox("Y Axis (Metric)", numeric_cols, index=numeric_cols.index('ods_mm') if 'ods_mm' in numeric_cols else 0)
+                # Default to ods_m (dollars) if available, otherwise ods_mm (man-months)
+                default_metric = 'ods_m' if 'ods_m' in numeric_cols else ('ods_mm' if 'ods_mm' in numeric_cols else (numeric_cols[0] if numeric_cols else None))
+                default_idx = numeric_cols.index(default_metric) if default_metric and default_metric in numeric_cols else 0
+                y_axis = st.selectbox("Y Axis (Metric)", numeric_cols, index=default_idx)
             with col4:
                 color_dim = st.selectbox("Color / Group By", ["None"] + cat_cols, index=cat_cols.index('hw_sw') + 1 if 'hw_sw' in cat_cols else 0)
 

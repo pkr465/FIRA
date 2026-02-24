@@ -40,8 +40,10 @@ OPEX_EXPECTED_COLUMNS = {
     "project_number":  "bigint",
     "dept_lead":       "text",
     "hw_sw":           "text",
-    "tm1_mm":          "numeric",
-    "ods_mm":          "numeric",
+    "tm1_m":           "numeric",        # TM1 ($'M) — budget dollars from $Data sheet
+    "ods_m":           "numeric",        # ODS ($'M) — actual spend dollars from $Data sheet
+    "tm1_mm":          "numeric",        # TM1 MM   — budget man-months from MM Data sheet
+    "ods_mm":          "numeric",        # ODS MM   — actual man-months from MM Data sheet
     "vector":          "USER-DEFINED",   # pgvector type
     "additional_data": "jsonb",
     "created_at":      "timestamp with time zone",
@@ -97,6 +99,8 @@ CREATE TABLE IF NOT EXISTS opex_data_hybrid (
     project_number BIGINT,
     dept_lead TEXT,
     hw_sw TEXT,
+    tm1_m  NUMERIC(18, 6),
+    ods_m  NUMERIC(18, 6),
     tm1_mm NUMERIC(18, 6),
     ods_mm NUMERIC(18, 6),
     vector vector(1024),

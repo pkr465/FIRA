@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 import logging
 import argparse
@@ -43,18 +44,51 @@ class DataIngestionAgent:
         """
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, content))
 
+    # Canonical aliases: maps cleaned metric prefixes to DB column names.
+    # The normalizer strips all special chars to produce a clean prefix for lookup.
+    # Example flow:  "ODS ($'M)" → lower → "ods ($'m)" → strip specials → "ods m" → alias → "ods_mm"
+    #                "TM1 (MM)"  → lower → "tm1 (mm)"  → strip specials → "tm1 mm" → alias → "tm1_mm"
+    _METRIC_ALIASES = {
+        # $Data sheet — dollar columns: ODS ($'M) / TM1 ($'M) → ods_m / tm1_m
+        "ods m":   "ods_m",     # ODS ($'M), ODS ($M), ODS (M), etc.
+        "tm1 m":   "tm1_m",     # TM1 ($'M), TM1 ($M), TM1 (M), etc.
+        # MM Data sheet — man-month columns: ODS MM / TM1 MM → ods_mm / tm1_mm
+        "ods mm":  "ods_mm",    # ODS (MM), ODS MM
+        "tm1 mm":  "tm1_mm",    # TM1 (MM), TM1 MM
+    }
+
+    @staticmethod
+    def _clean_for_alias(key: str) -> str:
+        """Strip everything except letters, digits, and spaces for alias lookup."""
+        return re.sub(r"[^a-z0-9 ]+", "", key).strip()
+
     def _normalize_keys(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Converts dictionary keys to snake_case to match Database Schema expectations.
         Example: "Fiscal Year" -> "fiscal_year", "HW/SW" -> "hw_sw"
+
+        For metric columns like "ODS ($'M)" or "TM1 (MM)", strips all special
+        characters and uses canonical alias lookup → "ods_mm" / "tm1_mm".
         """
         normalized = {}
         for k, v in data.items():
-            if k is None: continue
-            # Convert to lower case, replace spaces/slashes/dashes with underscores
-            new_key = k.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
-            # Remove any double underscores if they appear
-            new_key = new_key.replace("__", "_")
+            if k is None:
+                continue
+
+            raw_lower = k.lower().strip()
+
+            # Check if this is a known metric column (ODS/TM1 variants)
+            cleaned = self._clean_for_alias(raw_lower)
+            if cleaned in self._METRIC_ALIASES:
+                new_key = self._METRIC_ALIASES[cleaned]
+            else:
+                # Standard snake_case normalization
+                new_key = raw_lower.replace(" ", "_").replace("/", "_").replace("-", "_")
+                # Remove parentheses, dollar signs, apostrophes, and other specials
+                new_key = re.sub(r"[()$',\"]+", "", new_key)
+                # Collapse multiple underscores
+                new_key = re.sub(r"_+", "_", new_key).strip("_")
+
             normalized[new_key] = v
         return normalized
 
@@ -68,8 +102,8 @@ class DataIngestionAgent:
             data_label = "Man-Months"
             metric_label = f"TM1 MM: {data.get('tm1_mm', 0)}, ODS MM: {data.get('ods_mm', 0)}"
         else:
-            data_label = "Spend ($M)"
-            metric_label = f"TM1 ($M): {data.get('tm1_mm', 0)}, ODS ($M): {data.get('ods_mm', 0)}"
+            data_label = "Spend ($'M)"
+            metric_label = f"TM1 ($'M): {data.get('tm1_m', 0)}, ODS ($'M): {data.get('ods_m', 0)}"
 
         lines = []
         lines.append(f"Data Type: {data_label}")

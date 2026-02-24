@@ -25,10 +25,10 @@ class DeptRollupDashboard:
             return
 
         # --- Data Cleaning ---
-        if 'ods_mm' in self.df.columns:
-            self.df['ods_mm_disp'] = pd.to_numeric(self.df['ods_mm'], errors='coerce').fillna(0)
+        if 'ods_m' in self.df.columns:
+            self.df['ods_m_disp'] = pd.to_numeric(self.df['ods_m'], errors='coerce').fillna(0)
         else:
-            st.error("Column 'ods_mm' (Spend) not found in data.")
+            st.error("Column 'ods_m' (Spend) not found in data.")
             return
 
         # --- 1. Total Spend by VP (Overview) ---
@@ -42,7 +42,7 @@ class DeptRollupDashboard:
             self.df['project_desc'] = 'Unknown'
 
         # Summary metric
-        total_spend = self.df['ods_mm_disp'].sum()
+        total_spend = self.df['ods_m_disp'].sum()
         unique_vps = self.df['dept_vp'].nunique()
         unique_projects = self.df['project_desc'].nunique()
         m1, m2, m3 = st.columns(3)
@@ -51,13 +51,13 @@ class DeptRollupDashboard:
         m3.metric("Projects", unique_projects)
         st.markdown("")
 
-        vp_summary = self.df.groupby('dept_vp')['ods_mm_disp'].sum().reset_index().sort_values('ods_mm_disp', ascending=True)
-        
+        vp_summary = self.df.groupby('dept_vp')['ods_m_disp'].sum().reset_index().sort_values('ods_m_disp', ascending=True)
+
         fig_summary = go.Figure(go.Bar(
-            x=vp_summary['ods_mm_disp'],
+            x=vp_summary['ods_m_disp'],
             y=vp_summary['dept_vp'],
             orientation='h',
-            text=vp_summary['ods_mm_disp'].apply(lambda x: f"${x:,.2f}M"),
+            text=vp_summary['ods_m_disp'].apply(lambda x: f"${x:,.2f}M"),
             textposition='auto',
             marker_color='#1f77b4'
         ))
@@ -75,17 +75,17 @@ class DeptRollupDashboard:
         # --- 2. Project Allocation per VP (Detailed) ---
         st.markdown("### Project Spend Distribution per VP ($M)")
         
-        rollup = self.df.groupby(['dept_vp', 'project_desc'])['ods_mm_disp'].sum().reset_index()
+        rollup = self.df.groupby(['dept_vp', 'project_desc'])['ods_m_disp'].sum().reset_index()
         fig_detailed = go.Figure()
         projects = sorted(rollup['project_desc'].unique())
-        
+
         for proj in projects:
             subset = rollup[rollup['project_desc'] == proj]
             fig_detailed.add_trace(go.Bar(
                 name=proj,
                 x=subset['dept_vp'],
-                y=subset['ods_mm_disp'],
-                text=subset['ods_mm_disp'].apply(lambda x: f"{x:.2f}"), # No 'M' inside bars to save space
+                y=subset['ods_m_disp'],
+                text=subset['ods_m_disp'].apply(lambda x: f"{x:.2f}"), # No 'M' inside bars to save space
                 textposition='inside',
                 insidetextanchor='middle'
             ))
@@ -102,7 +102,7 @@ class DeptRollupDashboard:
         st.plotly_chart(fig_detailed, use_container_width=True)
 
         with st.expander("View Underlying Data"):
-            pivot_view = rollup.pivot(index='dept_vp', columns='project_desc', values='ods_mm_disp').fillna(0)
+            pivot_view = rollup.pivot(index='dept_vp', columns='project_desc', values='ods_m_disp').fillna(0)
             pivot_view['Total'] = pivot_view.sum(axis=1)
             st.dataframe(pivot_view.style.format("${:,.2f}M"))
 
@@ -187,7 +187,7 @@ class DeptRollup(PageBase):
                 "SELECT",
                 "   additional_data->>'dept_vp' as dept_vp,",
                 "   additional_data->>'project_desc' as project_desc,",
-                "   COALESCE(CAST(additional_data->>'ods_mm' AS NUMERIC), 0) as ods_mm",
+                "   COALESCE(CAST(additional_data->>'ods_m' AS NUMERIC), 0) as ods_m",
                 "FROM opex_data_hybrid",
                 "WHERE additional_data->>'dept_lead' = :lname",
                 "AND COALESCE(additional_data->>'fiscal_year', additional_data->>'year', additional_data->>'Year')::text = :year",

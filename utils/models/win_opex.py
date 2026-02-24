@@ -90,7 +90,10 @@ class WINOpexDataHybrid(Base):
     dept_lead: Mapped[Optional[str]] = mapped_column(Text)
     hw_sw: Mapped[Optional[str]] = mapped_column(Text)
     
-    # Numeric precision (18, 6) matching the SQL schema
+    # Dollar columns — from $Data sheet: TM1 ($'M) and ODS ($'M)
+    tm1_m: Mapped[Optional[float]] = mapped_column(Numeric(18, 6))
+    ods_m: Mapped[Optional[float]] = mapped_column(Numeric(18, 6))
+    # Man-month columns — from MM Data sheet: TM1 MM and ODS MM
     tm1_mm: Mapped[Optional[float]] = mapped_column(Numeric(18, 6))
     ods_mm: Mapped[Optional[float]] = mapped_column(Numeric(18, 6))
 

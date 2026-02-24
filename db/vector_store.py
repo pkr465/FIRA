@@ -144,6 +144,10 @@ class PostgresVectorStore:
                         "project_number": clean_num(meta.get("project_number")),
                         "dept_lead": meta.get("dept_lead"),
                         "hw_sw": meta.get("hw_sw"),
+                        # Dollar columns — from $Data sheet
+                        "tm1_m":  clean_num(meta.get("tm1_m")),
+                        "ods_m":  clean_num(meta.get("ods_m")),
+                        # Man-month columns — from MM Data sheet
                         "tm1_mm": clean_num(meta.get("tm1_mm")),
                         "ods_mm": clean_num(meta.get("ods_mm")),
                         "additional_data": json.dumps(meta),
@@ -157,17 +161,26 @@ class PostgresVectorStore:
                         INSERT INTO {self.table_name} (
                             uuid, source_file, source_sheet, data_type,
                             fiscal_year, project_number, dept_lead, hw_sw,
-                            tm1_mm, ods_mm,
+                            tm1_m, ods_m, tm1_mm, ods_mm,
                             additional_data, {self.vector_col}
                         )
                         VALUES (
                             :uuid, :source_file, :source_sheet, :data_type,
                             :fiscal_year, :project_number, :dept_lead, :hw_sw,
-                            :tm1_mm, :ods_mm,
+                            :tm1_m, :ods_m, :tm1_mm, :ods_mm,
                             :additional_data, :vector
                         )
                         ON CONFLICT (uuid) DO UPDATE SET
                             data_type = EXCLUDED.data_type,
+                            fiscal_year = EXCLUDED.fiscal_year,
+                            project_number = EXCLUDED.project_number,
+                            dept_lead = EXCLUDED.dept_lead,
+                            hw_sw = EXCLUDED.hw_sw,
+                            tm1_m = EXCLUDED.tm1_m,
+                            ods_m = EXCLUDED.ods_m,
+                            tm1_mm = EXCLUDED.tm1_mm,
+                            ods_mm = EXCLUDED.ods_mm,
+                            additional_data = EXCLUDED.additional_data,
                             {self.vector_col} = EXCLUDED.{self.vector_col},
                             updated_at = NOW();
                     """)

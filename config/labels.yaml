@@ -76,6 +76,13 @@ tables:
           - domain
           - hardware or software
           - type
+      ods_m:
+        description: ODS actual spend in millions of dollars.
+        synonyms:
+          - ods spend
+          - actual spend
+          - actual cost
+          - ods actual
       ods_mm:
         description: ODS Man Months; a measure of resource effort.
         synonyms:
@@ -105,6 +112,13 @@ tables:
         synonyms:
           - team
           - tech group
+      tm1_m:
+        description: TM1 budget spend in millions of dollars.
+        synonyms:
+          - tm1 spend
+          - budget spend
+          - budget cost
+          - tm1 budget
       tm1_mm:
         description: TM1 Man Months; alternative measure of resource effort.
         synonyms:

@@ -846,12 +846,12 @@ class ChatBot(PageBase):
         with st.expander("Suggested Queries", expanded=False):
             st.caption("**OpEx Financial Analytics**")
             opex_queries = [
-                ("Total Spend by Quarter", "What is the total spend (ods_mm) for each fiscal quarter?"),
+                ("Total Spend by Quarter", "What is the total spend (ods_m) for each fiscal quarter?"),
                 ("Top 5 Projects", "Show me the top 5 projects by total spend."),
                 ("Department Leads", "List all unique department leads with their total managed spend."),
                 ("HW vs SW Spend", "Compare total HW vs SW spending across all fiscal years."),
                 ("Spend by Country", "What is the total spend split by country (home_dept_region_r1)?"),
-                ("Budget vs Actual", "Show budget (tm1_mm) vs actual spend (ods_mm) by project."),
+                ("Budget vs Actual", "Show budget (tm1_m) vs actual spend (ods_m) by project."),
                 ("Quarterly Variance", "Show budget vs actual variance by quarter for the latest fiscal year."),
                 ("Top VPs by Spend", "Who are the top 5 VPs by total managed spend?"),
             ]

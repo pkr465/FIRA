@@ -13,7 +13,7 @@ class FinancialTrendsDashboard:
         self.df = df.copy()
 
         # Coerce key numeric columns (JSONB values may arrive as strings)
-        for col in ['ods_mm', 'tm1_mm']:
+        for col in ['ods_m', 'tm1_m']:
             if col in self.df.columns:
                 self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
 
@@ -31,14 +31,14 @@ class FinancialTrendsDashboard:
         st.subheader("Monthly Spend Trend ($M)")
 
         has_month = 'fiscal_month' in self.df.columns
-        has_spend = 'ods_mm' in self.df.columns
+        has_spend = 'ods_m' in self.df.columns
         has_hw_sw = 'hw_sw' in self.df.columns and self.df['hw_sw'].notna().any()
 
         if has_month and has_spend:
             if has_hw_sw:
-                monthly = self.df.groupby(['fiscal_month', 'hw_sw'])['ods_mm'].sum().reset_index()
+                monthly = self.df.groupby(['fiscal_month', 'hw_sw'])['ods_m'].sum().reset_index()
             else:
-                monthly = self.df.groupby('fiscal_month')['ods_mm'].sum().reset_index()
+                monthly = self.df.groupby('fiscal_month')['ods_m'].sum().reset_index()
                 monthly['hw_sw'] = 'All'
 
             fig = go.Figure()
@@ -46,13 +46,13 @@ class FinancialTrendsDashboard:
                 subset = monthly[monthly['hw_sw'] == cat]
                 fig.add_trace(go.Scatter(
                     x=subset['fiscal_month'],
-                    y=subset['ods_mm'],
+                    y=subset['ods_m'],
                     mode='lines+markers',
                     name=str(cat),
                 ))
 
             fig.update_layout(
-                title="Monthly Opex Trend (ODS MM)",
+                title="Monthly Opex Trend (ODS $M)",
                 xaxis_title="Fiscal Month",
                 yaxis_title="Spend ($M)",
                 hovermode="x unified",
@@ -62,17 +62,17 @@ class FinancialTrendsDashboard:
             with st.expander("View Data Table"):
                 if has_hw_sw:
                     pivot = monthly.pivot(
-                        index='fiscal_month', columns='hw_sw', values='ods_mm'
+                        index='fiscal_month', columns='hw_sw', values='ods_m'
                     ).fillna(0)
                 else:
-                    pivot = monthly.set_index('fiscal_month')[['ods_mm']]
+                    pivot = monthly.set_index('fiscal_month')[['ods_m']]
                 st.dataframe(pivot.style.format("${:,.2f}"))
         else:
             missing = []
             if not has_month:
                 missing.append("fiscal_month")
             if not has_spend:
-                missing.append("ods_mm")
+                missing.append("ods_m")
             st.info(f"Monthly trend requires columns: {', '.join(missing)}. "
                     "These may not be present in the uploaded data.")
 
@@ -85,9 +85,9 @@ class FinancialTrendsDashboard:
 
         if has_quarter and has_spend:
             if has_hw_sw:
-                q_trend = self.df.groupby(['fiscal_quarter', 'hw_sw'])['ods_mm'].sum().reset_index()
+                q_trend = self.df.groupby(['fiscal_quarter', 'hw_sw'])['ods_m'].sum().reset_index()
             else:
-                q_trend = self.df.groupby('fiscal_quarter')['ods_mm'].sum().reset_index()
+                q_trend = self.df.groupby('fiscal_quarter')['ods_m'].sum().reset_index()
                 q_trend['hw_sw'] = 'All'
 
             fig_bar = go.Figure()
@@ -95,9 +95,9 @@ class FinancialTrendsDashboard:
                 subset = q_trend[q_trend['hw_sw'] == cat]
                 fig_bar.add_trace(go.Bar(
                     x=subset['fiscal_quarter'],
-                    y=subset['ods_mm'],
+                    y=subset['ods_m'],
                     name=str(cat),
-                    text=subset['ods_mm'].apply(lambda x: f"{x:.1f}"),
+                    text=subset['ods_m'].apply(lambda x: f"{x:.1f}"),
                     textposition='auto',
                 ))
 
@@ -112,27 +112,27 @@ class FinancialTrendsDashboard:
             with st.expander("View Quarterly Data"):
                 if has_hw_sw:
                     q_pivot = q_trend.pivot(
-                        index='fiscal_quarter', columns='hw_sw', values='ods_mm'
+                        index='fiscal_quarter', columns='hw_sw', values='ods_m'
                     ).fillna(0)
                 else:
-                    q_pivot = q_trend.set_index('fiscal_quarter')[['ods_mm']]
+                    q_pivot = q_trend.set_index('fiscal_quarter')[['ods_m']]
                 q_pivot['Total'] = q_pivot.sum(axis=1)
                 st.dataframe(q_pivot.style.format("${:,.2f}"))
         else:
             if not has_quarter:
                 st.info("Quarterly trend requires 'fiscal_quarter' column in the data.")
             elif not has_spend:
-                st.info("No spend (ods_mm) data available.")
+                st.info("No spend (ods_m) data available.")
 
         # ── Budget vs Actual Trend ──
-        has_budget = 'tm1_mm' in self.df.columns
+        has_budget = 'tm1_m' in self.df.columns
         if has_month and has_spend and has_budget:
             st.markdown("---")
             st.subheader("Budget vs Actual (Monthly)")
 
             bva = self.df.groupby('fiscal_month').agg(
-                Budget=('tm1_mm', 'sum'),
-                Actual=('ods_mm', 'sum'),
+                Budget=('tm1_m', 'sum'),
+                Actual=('ods_m', 'sum'),
             ).reset_index()
             bva['Variance'] = bva['Budget'] - bva['Actual']
 

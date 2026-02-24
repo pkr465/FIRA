@@ -72,7 +72,7 @@ def _load_opex_dollar() -> pd.DataFrame:
             df = raw
 
         # Coerce numerics
-        for col in ["ods_mm", "tm1_mm"]:
+        for col in ["ods_m", "tm1_m"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
         return df
@@ -161,8 +161,8 @@ class WhatIfEngine:
         # Apply exclusions
         if excluded_projects:
             mask = out[proj_col].isin(excluded_projects)
-            out.loc[mask, "ods_mm"] = 0
-            out.loc[mask, "tm1_mm"] = 0
+            out.loc[mask, "ods_m"] = 0
+            out.loc[mask, "tm1_m"] = 0
 
         # Apply % adjustments
         for proj, pct in adjustments.items():
@@ -170,8 +170,8 @@ class WhatIfEngine:
                 continue
             mask = out[proj_col] == proj
             multiplier = 1 + (pct / 100.0)
-            out.loc[mask, "ods_mm"] = out.loc[mask, "ods_mm"] * multiplier
-            out.loc[mask, "tm1_mm"] = out.loc[mask, "tm1_mm"] * multiplier
+            out.loc[mask, "ods_m"] = out.loc[mask, "ods_m"] * multiplier
+            out.loc[mask, "tm1_m"] = out.loc[mask, "tm1_m"] * multiplier
 
         return out
 
@@ -189,9 +189,9 @@ class WhatIfEngine:
         multiplier = 1 + (growth_pct / 100.0)
         if category_filter and category_col in out.columns:
             mask = out[category_col].str.lower().str.contains(category_filter.lower(), na=False)
-            out.loc[mask, "ods_mm"] = out.loc[mask, "ods_mm"] * multiplier
+            out.loc[mask, "ods_m"] = out.loc[mask, "ods_m"] * multiplier
         else:
-            out["ods_mm"] = out["ods_mm"] * multiplier
+            out["ods_m"] = out["ods_m"] * multiplier
         return out
 
     # ── Aggregation helpers ───────────────────────────────────────────────
@@ -202,8 +202,8 @@ class WhatIfEngine:
         if proj_col is None:
             return pd.DataFrame()
         agg = df.groupby(proj_col).agg(
-            Actual=("ods_mm", "sum"),
-            Budget=("tm1_mm", "sum"),
+            Actual=("ods_m", "sum"),
+            Budget=("tm1_m", "sum"),
         ).reset_index()
         agg.columns = ["Project", "Actual", "Budget"]
         agg["Variance"] = agg["Budget"] - agg["Actual"]
@@ -218,10 +218,10 @@ class WhatIfEngine:
     def aggregate_by_category(df: pd.DataFrame) -> pd.DataFrame:
         cat_col = "hw_sw" if "hw_sw" in df.columns else None
         if cat_col is None:
-            return pd.DataFrame({"Category": ["Total"], "Actual": [df["ods_mm"].sum()], "Budget": [df["tm1_mm"].sum()]})
+            return pd.DataFrame({"Category": ["Total"], "Actual": [df["ods_m"].sum()], "Budget": [df["tm1_m"].sum()]})
         agg = df.groupby(cat_col).agg(
-            Actual=("ods_mm", "sum"),
-            Budget=("tm1_mm", "sum"),
+            Actual=("ods_m", "sum"),
+            Budget=("tm1_m", "sum"),
         ).reset_index()
         agg.columns = ["Category", "Actual", "Budget"]
         agg["Variance"] = agg["Budget"] - agg["Actual"]
@@ -233,8 +233,8 @@ class WhatIfEngine:
         if q_col is None:
             return pd.DataFrame()
         agg = df.groupby(q_col).agg(
-            Actual=("ods_mm", "sum"),
-            Budget=("tm1_mm", "sum"),
+            Actual=("ods_m", "sum"),
+            Budget=("tm1_m", "sum"),
         ).reset_index()
         agg.columns = ["Quarter", "Actual", "Budget"]
         agg["Variance"] = agg["Budget"] - agg["Actual"]
@@ -250,8 +250,8 @@ class WhatIfEngine:
         if dept_col is None:
             return pd.DataFrame()
         agg = df.groupby(dept_col).agg(
-            Actual=("ods_mm", "sum"),
-            Budget=("tm1_mm", "sum"),
+            Actual=("ods_m", "sum"),
+            Budget=("tm1_m", "sum"),
         ).reset_index()
         agg.columns = ["Department", "Actual", "Budget"]
         agg["Variance"] = agg["Budget"] - agg["Actual"]
@@ -566,10 +566,10 @@ class WhatIfScenarios(PageBase):
         scenario_df = engine.apply_growth_rate(scenario_df, growth_pct, category_filter=cat_filter)
 
         # Side-by-side KPIs
-        base_total_actual = dollar_df["ods_mm"].sum()
-        base_total_budget = dollar_df["tm1_mm"].sum()
-        scen_total_actual = scenario_df["ods_mm"].sum()
-        scen_total_budget = scenario_df["tm1_mm"].sum()
+        base_total_actual = dollar_df["ods_m"].sum()
+        base_total_budget = dollar_df["tm1_m"].sum()
+        scen_total_actual = scenario_df["ods_m"].sum()
+        scen_total_budget = scenario_df["tm1_m"].sum()
 
         kpi_cols = st.columns(4)
         with kpi_cols[0]:
@@ -913,8 +913,8 @@ class WhatIfScenarios(PageBase):
         scenario_dfs = {}
 
         # Always include base case
-        base_total = dollar_df["ods_mm"].sum()
-        base_budget = dollar_df["tm1_mm"].sum()
+        base_total = dollar_df["ods_m"].sum()
+        base_budget = dollar_df["tm1_m"].sum()
         rows.append({
             "Scenario": "Base Case",
             "Total Actual ($M)": base_total,
@@ -938,11 +938,11 @@ class WhatIfScenarios(PageBase):
             sdf = engine.apply_growth_rate(sdf, gpct, category_filter=cat_filter)
             scenario_dfs[name] = sdf
 
-            s_total = sdf["ods_mm"].sum()
-            s_budget = sdf["tm1_mm"].sum()
+            s_total = sdf["ods_m"].sum()
+            s_budget = sdf["tm1_m"].sum()
             active = 0
             if "project_desc" in sdf.columns:
-                active_df = sdf[sdf["ods_mm"] > 0]
+                active_df = sdf[sdf["ods_m"] > 0]
                 active = len(active_df["project_desc"].dropna().unique())
 
             rows.append({

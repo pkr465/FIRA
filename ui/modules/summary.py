@@ -120,7 +120,7 @@ class WinOpexDashboard:
         
         with col_fin:
             st.subheader("Engineering $M")
-            value_col = 'ods_mm' if 'ods_mm' in self.df.columns else 'amount'
+            value_col = 'ods_m' if 'ods_m' in self.df.columns else 'amount'
             
             # Prepare Data
             df_fin = self.df.copy()
@@ -226,7 +226,7 @@ class WinOpexDashboard:
         group_cols = ['fiscal_quarter']
         if 'hw_sw' in q_data.columns:
             group_cols.append('hw_sw')
-        val_col = 'ods_mm' if 'ods_mm' in q_data.columns else 'tm1_mm'
+        val_col = 'ods_m' if 'ods_m' in q_data.columns else 'tm1_m'
         if val_col not in q_data.columns:
             st.info("No spend data available for analysis.")
             return
@@ -285,7 +285,7 @@ class WinOpexDashboard:
         # Aggregate
         # We want: Category | Rollup | Budget | Actual | Variance
         group_cols = ['Category', rollup_col]
-        spend_df = self._prepare_variance_data(df_q, 'ods_mm', group_cols)
+        spend_df = self._prepare_variance_data(df_q, 'ods_m', group_cols)
         
         if spend_df.empty:
             st.info("No spend data found.")
@@ -395,7 +395,7 @@ class Summary(PageBase):
                 df = raw_df
 
             # 3. Coerce numeric columns (JSONB values arrive as strings)
-            for num_col in ['ods_mm', 'tm1_mm']:
+            for num_col in ['ods_m', 'tm1_m']:
                 if num_col in df.columns:
                     df[num_col] = pd.to_numeric(df[num_col], errors='coerce').fillna(0)
 

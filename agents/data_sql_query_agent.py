@@ -68,8 +68,10 @@ You have access to THREE tables. Choose the right one(s) based on the user's que
 Contains a JSONB column named `additional_data`. Most business columns are INSIDE this JSON.
 
 1. **METRICS (Effort/Cost)**
-   - "Spend", "Cost", "Resources" -> `CAST(additional_data->>'ods_mm' AS NUMERIC)`
-   - "Budget", "TM1" -> `CAST(additional_data->>'tm1_mm' AS NUMERIC)`
+   - "Spend", "Cost", "Actual" (DOLLARS) -> `ods_m` column (or `CAST(additional_data->>'ods_m' AS NUMERIC)`)
+   - "Budget", "TM1" (DOLLARS) -> `tm1_m` column (or `CAST(additional_data->>'tm1_m' AS NUMERIC)`)
+   - "Man-months", "MM", "Headcount" -> `ods_mm` column (or `CAST(additional_data->>'ods_mm' AS NUMERIC)`)
+   - "Budget MM", "Plan MM" -> `tm1_mm` column (or `CAST(additional_data->>'tm1_mm' AS NUMERIC)`)
 
 2. **GEOGRAPHY**
    - "Country", "Region" -> `additional_data->>'home_dept_region_r1'`
@@ -87,9 +89,10 @@ Contains a JSONB column named `additional_data`. Most business columns are INSID
    - "Project" -> `additional_data->>'project_desc'`
    - "HW/SW" -> `additional_data->>'hw_sw'`
 
-6. **DATA TYPE FILTER** (IMPORTANT):
-   - For dollar/spend queries: `COALESCE(data_type, 'dollar') = 'dollar'`
-   - For man-month/HC queries: `COALESCE(data_type, 'dollar') = 'mm'`
+6. **DATA TYPE FILTER & COLUMN SELECTION** (IMPORTANT):
+   - For dollar/spend queries: use `ods_m` (actual) and `tm1_m` (budget), filter `COALESCE(data_type, 'dollar') = 'dollar'`
+   - For man-month/HC queries: use `ods_mm` (actual) and `tm1_mm` (budget), filter `COALESCE(data_type, 'dollar') = 'mm'`
+   - NEVER use `ods_mm` for dollar queries or `ods_m` for man-month queries
 
 ---
 #### TABLE 2: `bpafg_demand`  (Resource Planner — Demand)
