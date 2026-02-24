@@ -133,7 +133,7 @@ class DeptRollup(PageBase):
 
     def get_available_leads(self) -> List[str]:
         try:
-            query = "SELECT DISTINCT additional_data->>'dept_lead' as dept_lead FROM opex_data_hybrid WHERE additional_data->>'dept_lead' IS NOT NULL ORDER BY 1"
+            query = "SELECT DISTINCT additional_data->>'dept_lead' as dept_lead FROM opex_data_hybrid WHERE additional_data->>'dept_lead' IS NOT NULL AND COALESCE(data_type, 'dollar') = 'dollar' ORDER BY 1"
             with self.db.engine.connect() as conn:
                 return [row[0] for row in conn.execute(text(query)).fetchall()]
         except Exception:
@@ -152,6 +152,7 @@ class DeptRollup(PageBase):
                     COALESCE(additional_data->>'fiscal_quarter', additional_data->>'quarter', additional_data->>'Quarter', additional_data->>'qtr') as quarter
                 FROM opex_data_hybrid 
                 WHERE (additional_data->>'fiscal_year' IS NOT NULL OR additional_data->>'year' IS NOT NULL)
+                AND COALESCE(data_type, 'dollar') = 'dollar'
                 ORDER BY 1 DESC, 2
             """
             years = []
@@ -189,7 +190,8 @@ class DeptRollup(PageBase):
                 "   COALESCE(CAST(additional_data->>'ods_mm' AS NUMERIC), 0) as ods_mm",
                 "FROM opex_data_hybrid",
                 "WHERE additional_data->>'dept_lead' = :lname",
-                "AND COALESCE(additional_data->>'fiscal_year', additional_data->>'year', additional_data->>'Year')::text = :year"
+                "AND COALESCE(additional_data->>'fiscal_year', additional_data->>'year', additional_data->>'Year')::text = :year",
+                "AND COALESCE(data_type, 'dollar') = 'dollar'"
             ]
 
             if quarter != "All Quarters":

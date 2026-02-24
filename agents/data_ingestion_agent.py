@@ -62,15 +62,24 @@ class DataIngestionAgent:
         """
         Converts the raw data dictionary (snake_case keys) into a semantic string for embedding.
         """
+        # Derive data type from source_sheet
+        sheet = (data.get('source_sheet') or '').lower()
+        if 'mm' in sheet and '$' not in sheet:
+            data_label = "Man-Months"
+            metric_label = f"TM1 MM: {data.get('tm1_mm', 0)}, ODS MM: {data.get('ods_mm', 0)}"
+        else:
+            data_label = "Spend ($M)"
+            metric_label = f"TM1 ($M): {data.get('tm1_mm', 0)}, ODS ($M): {data.get('ods_mm', 0)}"
+
         lines = []
-        # UPDATED: Using snake_case keys to match normalized data
+        lines.append(f"Data Type: {data_label}")
         lines.append(f"Project: {data.get('project_desc', 'N/A')} ({data.get('project_number', 'N/A')})")
         lines.append(f"Fiscal Year: {data.get('fiscal_year', 'N/A')} {data.get('fiscal_quarter', 'N/A')}")
         lines.append(f"Department: {data.get('home_dept_desc', 'N/A')} (Lead: {data.get('dept_lead', 'N/A')})")
         lines.append(f"Expense Type: {data.get('exp_type_r5', 'N/A')} - {data.get('exp_type_r3', 'N/A')}")
-        lines.append(f"Cost: TM1 MM {data.get('tm1_mm', 0)}, ODS MM {data.get('ods_mm', 0)}")
+        lines.append(metric_label)
         lines.append(f"Details: HW/SW: {data.get('hw_sw', 'N/A')}, Location: {data.get('home_dept_region_r2', 'N/A')}")
-        
+
         return "\n".join(lines)
 
     def process_jsonl(self, file_path: str):

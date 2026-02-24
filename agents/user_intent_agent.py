@@ -1,3 +1,13 @@
+"""
+FIRA User Intent Agent — Smart Router with Clarification
+
+Features:
+  - LLM-based intent classification with keyword fallback
+  - Low-confidence detection → asks clarifying questions
+  - Refined query translation (business terms → schema columns)
+  - Structured response passthrough from agents (dict or str)
+"""
+
 import logging
 import json
 from typing import Dict, Any, Optional
@@ -14,17 +24,20 @@ from agents.chatbot_agent import ChatbotAgent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class IntentType(str, Enum):
     DATA_SQL = "DATA_SQL_QUERY"
     SEMANTIC_RAG = "SEMANTIC_SEARCH"
     GENERAL_CHAT = "GENERAL_CHAT"
+
 
 class IntentResponse(BaseModel):
     intent: IntentType
     confidence: float
     reasoning: str
     suggested_agent: str
-    refined_query: Optional[str] = None 
+    refined_query: Optional[str] = None
+
 
 # Condensed Schema Map for Intent Recognition
 INTENT_SCHEMA_HINT = """
@@ -33,6 +46,8 @@ INTENT_SCHEMA_HINT = """
 - **Geography**: 'home_dept_region_r1' (Country), 'home_dept_region_r2' (City/Location)
 - **Organization**: 'dept_lead' (Manager), 'dept_vp' (VP), 'home_dept_desc' (Department)
 - **Time**: 'fiscal_year', 'fiscal_quarter'
+- **Project**: 'project_desc' (Project Name), 'hw_sw' (HW/SW Category)
+- **Data Type**: data_type = 'dollar' (spend) or 'mm' (man-months)
 
 **Table: bpafg_demand** (Resource Planner — Demand):
 - resource_name, project_name, task_name, homegroup, dept_country
@@ -43,6 +58,7 @@ INTENT_SCHEMA_HINT = """
 - project, priority, country, target_capacity, country_cost, month, monthly_capacity
 - Keywords: priority, capacity, ranking, cost per resource
 """
+
 
 class UserIntentAgent:
     def __init__(self):
@@ -81,7 +97,7 @@ class UserIntentAgent:
         Analyze the input: "{user_query}"
 
         If the intent is DATA_SQL_QUERY, you MUST generate a `refined_query` that translates the user's terms to the hints provided above.
-        Example: 
+        Example:
         User: "Show me spend by city"
         Refined: "Show me sum(ods_mm) grouped by home_dept_region_r2"
 
@@ -99,10 +115,10 @@ class UserIntentAgent:
             response_text = self.utils.llm_call(full_prompt)
             cleaned_response = response_text.replace("```json", "").replace("```", "").strip()
 
-            start_idx = cleaned_response.find('{')
-            end_idx = cleaned_response.rfind('}')
+            start_idx = cleaned_response.find("{")
+            end_idx = cleaned_response.rfind("}")
             if start_idx != -1 and end_idx != -1:
-                json_str = cleaned_response[start_idx:end_idx+1]
+                json_str = cleaned_response[start_idx : end_idx + 1]
                 data = json.loads(json_str)
                 if not data or "intent" not in data:
                     raise ValueError("LLM returned empty or invalid JSON (possible API error)")
@@ -117,11 +133,9 @@ class UserIntentAgent:
     def _keyword_fallback(self, user_query: str) -> IntentResponse:
         """
         Rule-based intent classification when the LLM is unavailable.
-        Uses keyword matching to route the query to the correct agent.
         """
         q = user_query.lower()
 
-        # SQL/data keywords
         sql_keywords = [
             "spend", "budget", "cost", "total", "sum", "average", "count",
             "how much", "how many", "list", "show me", "top", "bottom",
@@ -129,9 +143,9 @@ class UserIntentAgent:
             "headcount", "demand", "fte", "allocation", "capacity", "staffing",
             "priority", "ranking", "trend", "quarterly", "fiscal", "variance",
             "opex", "resource", "department", "manager", "lead", "region",
+            "man month", "man-month", "mm",
         ]
 
-        # Semantic/RAG keywords
         rag_keywords = [
             "explain", "summarize", "what is", "what are", "policy",
             "meaning", "define", "how to", "why", "describe", "overview",
@@ -164,25 +178,43 @@ class UserIntentAgent:
                 suggested_agent="ChatBot",
             )
 
-    def route_and_execute(self, user_query: str) -> str:
+    def route_and_execute(self, user_query: str) -> Any:
+        """
+        Routes the query to the appropriate agent and returns the result.
+        Returns can be: str (chat/semantic) or dict (SQL agent structured response).
+        """
         decision = self.identify_intent(user_query)
-        logger.info(f"Decision: {decision.intent}, Refined Query: {decision.refined_query}")
+        logger.info(f"Decision: {decision.intent}, Confidence: {decision.confidence}, Refined: {decision.refined_query}")
 
-        if decision.confidence < 0.60:
-            return f"I'm not sure (Confidence: {decision.confidence}). Did you mean to ask about data?"
+        # Low confidence — return a clarification response
+        if decision.confidence < 0.50:
+            return {
+                "status": "clarification_needed",
+                "message": (
+                    f"I'm not fully sure what you're looking for (confidence: {decision.confidence:.0%}). "
+                    "Could you be more specific?"
+                ),
+                "suggestions": [
+                    "Try asking about specific metrics: 'total spend by project'",
+                    "For resource data: 'headcount demand by country'",
+                    "For explanations: 'explain the variance report process'",
+                ],
+                "reasoning": decision.reasoning,
+            }
 
         if decision.intent == IntentType.DATA_SQL:
-            # Use the refined query which now has schema-specific terms
             final_query = decision.refined_query if decision.refined_query else user_query
-            return self.sql_agent.run(final_query)
+            # SQL agent returns a dict — pass it through directly
+            result = self.sql_agent.run(final_query)
+            return result
 
         elif decision.intent == IntentType.SEMANTIC_RAG:
             return self.semantic_agent.run(user_query)
-            
+
         else:
             return self.chatbot_agent.run(user_query)
 
+
 if __name__ == "__main__":
     agent = UserIntentAgent()
-    # Test
     print(agent.route_and_execute("What is the spend in San Jose for Q4?"))

@@ -18,6 +18,7 @@ from ui.modules.chat_history import ChatHistory
 from ui.modules.metrics_financial_trends import FinancialTrends
 from ui.modules.metrics_dept_rollup import DeptRollup
 from ui.modules.metrics_resource_allocation import ResourceAllocation
+from ui.modules.metrics_manmonth import ManMonthAnalysis
 from ui.modules.metrics_geo_org import GeoOrgMetrics
 from ui.modules.plotting_sandbox import SandboxPage
 
@@ -27,6 +28,9 @@ from ui.modules.cbn_resource_planner import CBNResourcePlanner
 # Import Data Management Page
 from ui.modules.data_management import DataManagement
 
+# Import What-If Scenarios
+from ui.modules.whatif_scenarios import WhatIfScenarios
+
 # Define Pages
 PAGES = {
     "Welcome": Welcome(title="Welcome", url="welcome"),
@@ -35,8 +39,10 @@ PAGES = {
     "OpEx Summary": Summary(title="OpEx Summary", url="summary"),
     "Financial Trends": FinancialTrends(title="Financial Trends", url="financial_trends"),
     "Resource Alloc": ResourceAllocation(title="Resource Allocation", url="resource_allocation"),
+    "Man-Month": ManMonthAnalysis(title="Man-Month Analysis", url="manmonth"),
     "Dept Rollup": DeptRollup(title="Dept Rollup", url="department_rollup"),
     "Geo & Org": GeoOrgMetrics(title="Geo & Org Analytics", url="geo_org"),
+    "What-If": WhatIfScenarios(title="What-If Scenarios", url="whatif"),
     "Sandbox": SandboxPage(title="Plotting Sandbox", url="sandbox"),
     "ChatBot": ChatBot(title="Opex Chat", url="chatbot"),
     "FAQ": FAQ(title="FAQ", url="faq"),

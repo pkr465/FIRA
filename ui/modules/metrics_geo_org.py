@@ -22,9 +22,10 @@ class GeoOrgMetrics(PageBase):
         """Fetch list of available projects."""
         try:
             query = """
-            SELECT DISTINCT additional_data->>'project_desc' 
-            FROM opex_data_hybrid 
-            WHERE additional_data->>'project_desc' IS NOT NULL 
+            SELECT DISTINCT additional_data->>'project_desc'
+            FROM opex_data_hybrid
+            WHERE additional_data->>'project_desc' IS NOT NULL
+            AND COALESCE(data_type, 'dollar') = 'dollar'
             ORDER BY 1
             """
             with self.db.engine.connect() as conn:
@@ -61,7 +62,7 @@ class GeoOrgMetrics(PageBase):
     def get_project_data(self, project_name):
         """Fetch and clean data, specifically targeting R1 (Country) and R2 (City)."""
         try:
-            query = "SELECT * FROM opex_data_hybrid WHERE additional_data->>'project_desc' = :p"
+            query = "SELECT * FROM opex_data_hybrid WHERE additional_data->>'project_desc' = :p AND COALESCE(data_type, 'dollar') = 'dollar'"
             raw = pd.read_sql(text(query), self.db.engine, params={"p": project_name})
             
             if not raw.empty and 'additional_data' in raw.columns:

@@ -354,9 +354,10 @@ class Summary(PageBase):
         """Fetch unique project names using the confirmed key 'project_desc'."""
         try:
             query = """
-            SELECT DISTINCT additional_data->>'project_desc' as project 
-            FROM opex_data_hybrid 
+            SELECT DISTINCT additional_data->>'project_desc' as project
+            FROM opex_data_hybrid
             WHERE additional_data->>'project_desc' IS NOT NULL
+            AND COALESCE(data_type, 'dollar') = 'dollar'
             ORDER BY 1
             """
             with self.db.engine.connect() as conn:
@@ -373,6 +374,7 @@ class Summary(PageBase):
                 SELECT *
                 FROM opex_data_hybrid
                 WHERE additional_data->>'project_desc' = :pname
+                AND COALESCE(data_type, 'dollar') = 'dollar'
             """
             raw_df = pd.read_sql(text(query), self.db.engine, params={"pname": project_name})
             

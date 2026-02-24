@@ -173,14 +173,17 @@ class ResourceAllocation(PageBase):
         try:
             query = ("SELECT DISTINCT additional_data->>'project_desc' "
                      "FROM opex_data_hybrid "
-                     "WHERE additional_data->>'project_desc' IS NOT NULL ORDER BY 1")
+                     "WHERE additional_data->>'project_desc' IS NOT NULL "
+                     "AND COALESCE(data_type, 'dollar') = 'mm' ORDER BY 1")
             with self.db.engine.connect() as conn:
                 return [row[0] for row in conn.execute(text(query)).fetchall()]
         except Exception:
             return []
 
     def get_data(self, project_name):
-        query = "SELECT * FROM opex_data_hybrid WHERE additional_data->>'project_desc' = :p"
+        query = ("SELECT * FROM opex_data_hybrid "
+                 "WHERE additional_data->>'project_desc' = :p "
+                 "AND COALESCE(data_type, 'dollar') = 'mm'")
         raw = pd.read_sql(text(query), self.db.engine, params={"p": project_name})
         if not raw.empty and 'additional_data' in raw.columns:
             json_df = pd.json_normalize(raw['additional_data'])

@@ -35,6 +35,7 @@ OPEX_EXPECTED_COLUMNS = {
     "uuid":            "uuid",
     "source_file":     "text",
     "source_sheet":    "text",
+    "data_type":       "text",           # 'mm' (man-months) or 'dollar' ($M spend)
     "fiscal_year":     "integer",
     "project_number":  "bigint",
     "dept_lead":       "text",
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS opex_data_hybrid (
     uuid UUID UNIQUE NOT NULL,
     source_file TEXT,
     source_sheet TEXT,
+    data_type TEXT DEFAULT 'dollar',
     fiscal_year INTEGER,
     project_number BIGINT,
     dept_lead TEXT,
@@ -106,6 +108,7 @@ CREATE TABLE IF NOT EXISTS opex_data_hybrid (
 
 OPEX_INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_hybrid_uuid ON opex_data_hybrid(uuid);",
+    "CREATE INDEX IF NOT EXISTS idx_hybrid_data_type ON opex_data_hybrid(data_type);",
     "CREATE INDEX IF NOT EXISTS idx_hybrid_fiscal_year ON opex_data_hybrid(fiscal_year);",
     "CREATE INDEX IF NOT EXISTS idx_hybrid_project_number ON opex_data_hybrid(project_number);",
     "CREATE INDEX IF NOT EXISTS idx_hybrid_dept_lead ON opex_data_hybrid(dept_lead);",

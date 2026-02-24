@@ -126,10 +126,20 @@ class PostgresVectorStore:
                     
                     def clean_num(val): return val if val not in [None, ""] else None
 
+                    # Derive data_type from source_sheet name
+                    sheet = (meta.get("source_sheet") or "").lower()
+                    if "mm" in sheet and "$" not in sheet:
+                        data_type = "mm"
+                    elif "$" in sheet or "dollar" in sheet:
+                        data_type = "dollar"
+                    else:
+                        data_type = "dollar"  # default
+
                     record = {
                         "uuid": meta.get("id"),
                         "source_file": meta.get("source_file"),
                         "source_sheet": meta.get("source_sheet"),
+                        "data_type": data_type,
                         "fiscal_year": clean_num(meta.get("fiscal_year")),
                         "project_number": clean_num(meta.get("project_number")),
                         "dept_lead": meta.get("dept_lead"),
@@ -137,7 +147,7 @@ class PostgresVectorStore:
                         "tm1_mm": clean_num(meta.get("tm1_mm")),
                         "ods_mm": clean_num(meta.get("ods_mm")),
                         "additional_data": json.dumps(meta),
-                        "vector": embeddings[j] # Writing vector directly to hybrid table
+                        "vector": embeddings[j]
                     }
                     records.append(record)
 
@@ -145,18 +155,19 @@ class PostgresVectorStore:
                 with self.engine.begin() as conn:
                     stmt = text(f"""
                         INSERT INTO {self.table_name} (
-                            uuid, source_file, source_sheet, 
-                            fiscal_year, project_number, dept_lead, hw_sw, 
-                            tm1_mm, ods_mm, 
+                            uuid, source_file, source_sheet, data_type,
+                            fiscal_year, project_number, dept_lead, hw_sw,
+                            tm1_mm, ods_mm,
                             additional_data, {self.vector_col}
                         )
                         VALUES (
-                            :uuid, :source_file, :source_sheet, 
-                            :fiscal_year, :project_number, :dept_lead, :hw_sw, 
-                            :tm1_mm, :ods_mm, 
+                            :uuid, :source_file, :source_sheet, :data_type,
+                            :fiscal_year, :project_number, :dept_lead, :hw_sw,
+                            :tm1_mm, :ods_mm,
                             :additional_data, :vector
                         )
                         ON CONFLICT (uuid) DO UPDATE SET
+                            data_type = EXCLUDED.data_type,
                             {self.vector_col} = EXCLUDED.{self.vector_col},
                             updated_at = NOW();
                     """)

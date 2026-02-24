@@ -30,11 +30,20 @@ schema_map:
   year: fiscal_year
   quarter: fiscal_quarter
 
-  # -- Metrics / Costs (Requested Updates) --
+  # -- Data Type --
+  data_type: data_type          # 'mm' (man-months) or 'dollar' ($M spend)
+  sheet_type: data_type
+
+  # -- Metrics / Costs --
+  # In $ Data sheet: ods_mm = ODS($M) actual spend, tm1_mm = TM1($M) budget spend
+  # In MM Data sheet: ods_mm = ODS_MM man-months, tm1_mm = TM1 MM man-months
   cost: ods_mm
   spend: ods_mm
   "type of cost": tm1_mm
   "cost type": tm1_mm
+  man_months: ods_mm
+  manmonths: ods_mm
+  headcount: ods_mm
   lead: dept_lead
 
 create_table_sql: |
@@ -49,6 +58,7 @@ create_table_sql: |
       -- === Source Metadata ===
       source_file TEXT,
       source_sheet TEXT,
+      data_type TEXT DEFAULT 'dollar',  -- 'mm' or 'dollar'
 
       -- === Promoted Columns ===
       fiscal_year INTEGER,

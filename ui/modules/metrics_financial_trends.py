@@ -176,14 +176,17 @@ class FinancialTrends(PageBase):
         try:
             query = ("SELECT DISTINCT additional_data->>'project_desc' as project "
                      "FROM opex_data_hybrid "
-                     "WHERE additional_data->>'project_desc' IS NOT NULL ORDER BY 1")
+                     "WHERE additional_data->>'project_desc' IS NOT NULL "
+                     "AND COALESCE(data_type, 'dollar') = 'dollar' ORDER BY 1")
             with self.db.engine.connect() as conn:
                 return [row[0] for row in conn.execute(text(query)).fetchall()]
         except Exception:
             return []
 
     def get_data(self, project_name: str) -> pd.DataFrame:
-        query = "SELECT * FROM opex_data_hybrid WHERE additional_data->>'project_desc' = :pname"
+        query = ("SELECT * FROM opex_data_hybrid "
+                 "WHERE additional_data->>'project_desc' = :pname "
+                 "AND COALESCE(data_type, 'dollar') = 'dollar'")
         raw_df = pd.read_sql(text(query), self.db.engine, params={"pname": project_name})
 
         if not raw_df.empty and 'additional_data' in raw_df.columns:

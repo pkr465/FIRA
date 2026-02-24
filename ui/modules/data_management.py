@@ -37,6 +37,9 @@ class DataManagement(PageBase):
         # ── Health / row-count overview ──────────────────────────────────
         self._render_table_status()
 
+        # ── Delete Data ───────────────────────────────────────────────────
+        self._render_delete_section()
+
         st.markdown("---")
 
         # ── Three tabs: OpEx | Resource Planner | Headcount ──────────────
@@ -88,6 +91,83 @@ class DataManagement(PageBase):
                 return result.scalar()
         except Exception:
             return None
+
+    # =====================================================================
+    # Delete Data
+    # =====================================================================
+    def _render_delete_section(self):
+        """Render delete-data controls with confirmation."""
+        with st.expander("Delete Data", expanded=False):
+            st.caption(
+                "Truncate (empty) tables while keeping the schema intact. "
+                "Subsequent ingestion will work normally."
+            )
+
+            TABLE_MAP = {
+                "opex_data_hybrid": "OpEx Hybrid",
+                "bpafg_demand": "BPAFG Demand",
+                "priority_template": "Priority Template",
+                "headcount_data": "Headcount",
+                "langchain_pg_embedding": "LangChain Embeddings",
+                "langchain_pg_collection": "LangChain Collections",
+            }
+
+            cols = st.columns(len(TABLE_MAP) + 1)
+
+            # Per-table delete buttons
+            for i, (tbl, label) in enumerate(TABLE_MAP.items()):
+                with cols[i]:
+                    if st.button(f"Delete {label}", key=f"del_{tbl}"):
+                        st.session_state[f"confirm_del_{tbl}"] = True
+
+                    if st.session_state.get(f"confirm_del_{tbl}"):
+                        st.warning(f"Delete all **{label}** data?")
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            if st.button("Confirm", key=f"confirm_yes_{tbl}", type="primary"):
+                                self._truncate_tables([tbl])
+                                st.session_state[f"confirm_del_{tbl}"] = False
+                                st.cache_data.clear()
+                                st.rerun()
+                        with c2:
+                            if st.button("Cancel", key=f"confirm_no_{tbl}"):
+                                st.session_state[f"confirm_del_{tbl}"] = False
+                                st.rerun()
+
+            # Delete ALL button
+            with cols[-1]:
+                if st.button("Delete ALL Data", key="del_all", type="primary"):
+                    st.session_state["confirm_del_all"] = True
+
+                if st.session_state.get("confirm_del_all"):
+                    st.error("This will delete **ALL** data from every table!")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("Yes, Delete All", key="confirm_yes_all", type="primary"):
+                            self._truncate_tables(list(TABLE_MAP.keys()))
+                            st.session_state["confirm_del_all"] = False
+                            st.cache_data.clear()
+                            st.rerun()
+                    with c2:
+                        if st.button("Cancel", key="confirm_no_all"):
+                            st.session_state["confirm_del_all"] = False
+                            st.rerun()
+
+    @staticmethod
+    def _truncate_tables(table_names: list):
+        """Truncate the given tables, resetting identity columns."""
+        from sqlalchemy import text
+        from utils.models.database import OpexDB
+
+        try:
+            with OpexDB.engine.begin() as conn:
+                for tbl in table_names:
+                    conn.execute(text(
+                        f"TRUNCATE TABLE {tbl} RESTART IDENTITY CASCADE"
+                    ))
+            st.success(f"Deleted data from: {', '.join(table_names)}")
+        except Exception as e:
+            st.error(f"Delete failed: {e}")
 
     # =====================================================================
     # OpEx section

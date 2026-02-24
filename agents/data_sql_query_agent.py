@@ -1,3 +1,16 @@
+"""
+FIRA SQL Query Agent — Comprehensive, Interactive, Smart
+
+Features:
+  - Query validation & disambiguation before SQL generation
+  - Suggested corrections for suboptimal queries
+  - Auto-retry with self-healing SQL
+  - Post-execution LLM analysis: trends, insights, anomalies
+  - Follow-up question suggestions
+  - Data quality warnings
+  - Confidence scoring
+"""
+
 import json
 import logging
 from typing import Dict, List, Any, Tuple, Optional
@@ -70,6 +83,14 @@ Contains a JSONB column named `additional_data`. Most business columns are INSID
    - "Year" -> `additional_data->>'fiscal_year'`
    - "Quarter" -> `additional_data->>'fiscal_quarter'`
 
+5. **PROJECT**
+   - "Project" -> `additional_data->>'project_desc'`
+   - "HW/SW" -> `additional_data->>'hw_sw'`
+
+6. **DATA TYPE FILTER** (IMPORTANT):
+   - For dollar/spend queries: `COALESCE(data_type, 'dollar') = 'dollar'`
+   - For man-month/HC queries: `COALESCE(data_type, 'dollar') = 'mm'`
+
 ---
 #### TABLE 2: `bpafg_demand`  (Resource Planner — Demand)
 Standard relational columns (NO JSON needed):
@@ -137,12 +158,33 @@ Your task is to generate an executable SQL query against one or more tables:
 4. **UNION Sorting**:
    - If using `UNION`, the `ORDER BY` clause MUST refer to column names or indices, NOT expressions.
 
+5. **DATA TYPE FILTERING (opex_data_hybrid)**:
+   - For dollar/spend queries: always add `AND COALESCE(data_type, 'dollar') = 'dollar'`
+   - For man-month/headcount queries: always add `AND COALESCE(data_type, 'dollar') = 'mm'`
+
 ### RESPONSE FORMAT:
-Return a JSON object with two keys:
+Return a JSON object with these keys:
 {{
     "sql": "SELECT ...",
-    "explanation": "A professional, executive-level explanation of the analysis (2-4 sentences). Describe what the query measures, which table(s) are being queried, and what business insight the results provide. Use clear financial/resource planning terminology suitable for senior leadership."
+    "explanation": "A professional, executive-level explanation of the analysis (2-4 sentences). Describe what the query measures, which table(s) are being queried, and what business insight the results provide. Use clear financial/resource planning terminology suitable for senior leadership.",
+    "chart_type": "bar|grouped_bar|line|pie|area|scatter|heatmap|treemap|waterfall|none"
 }}
+
+### CHART TYPE SELECTION:
+Choose `chart_type` based on the data and user's intent:
+- "bar" — single metric comparison across categories (default for most queries)
+- "grouped_bar" — comparing 2+ metrics side-by-side (e.g., budget vs actual)
+- "line" — time-series trends (monthly, quarterly data over time)
+- "pie" — composition/share analysis (e.g., "breakdown", "distribution", "share")
+- "area" — cumulative time-series (stacked trends)
+- "scatter" — correlation between two metrics
+- "heatmap" — 2D matrix comparisons (country × quarter, etc.)
+- "treemap" — hierarchical composition (e.g., VP → project → spend)
+- "waterfall" — variance/delta analysis (budget vs actual changes)
+- "none" — when visualization doesn't add value (simple counts, single values)
+
+If the user explicitly requests a chart type (e.g., "show me a pie chart", "plot a line trend"), use that type.
+If the user says "plot", "chart", "visualize", "graph", pick the most appropriate type for the data.
 """
 
 SQL_QUERY_FIX_PROMPT = """
@@ -162,9 +204,93 @@ Please fix it based on the error.
    - Simplify the ORDER BY clause. Sort by column name only.
 3. **Column Error?**
    - Check if you forgot `additional_data->>`.
+4. **Type Error?**
+   - Ensure numeric casts with COALESCE.
 
-Return the fixed query in JSON format.
+Return the fixed query in JSON format:
+{{"sql": "...", "explanation": "..."}}
 """
+
+# ==============================================================================
+# QUERY VALIDATION & DISAMBIGUATION
+# ==============================================================================
+
+QUERY_VALIDATION_PROMPT = """
+You are a query quality analyst for a financial database system. Analyze the user's query and determine if it is clear enough to generate accurate SQL.
+
+**Available Data:**
+{schema_hint}
+
+**User Query:** "{user_query}"
+
+**Evaluate:**
+1. Is the query specific enough? (does it mention what metric, time period, grouping?)
+2. Are there ambiguous terms that could map to multiple columns?
+3. Is the query asking for something the database can actually answer?
+4. Could the query be improved for better results?
+
+**Return JSON:**
+{{
+    "is_clear": true/false,
+    "confidence": 0.0 to 1.0,
+    "issues": ["list of ambiguity issues, if any"],
+    "suggestions": ["list of improved query phrasings, if any"],
+    "clarifying_questions": ["questions to ask the user, if needed"],
+    "interpreted_as": "How you understand the query in precise terms"
+}}
+"""
+
+# ==============================================================================
+# POST-EXECUTION ANALYSIS
+# ==============================================================================
+
+INSIGHT_ANALYSIS_PROMPT = """
+You are a Senior Financial & Resource Planning Analyst presenting findings to C-level executives.
+
+**Original Question:** {user_question}
+**SQL Query Executed:** {sql}
+**Query Explanation:** {explanation}
+**Data Results:**
+{results}
+
+**Your Task — Provide a comprehensive analysis:**
+
+1. **Executive Summary** (2-3 sentences): What does the data tell us? Summarize the key finding.
+
+2. **Key Metrics**: Identify the most important numbers and their significance.
+
+3. **Trends & Patterns**: Are there any notable trends, patterns, or seasonality in the data?
+   - Year-over-year changes
+   - Quarter-over-quarter trends
+   - Concentration patterns (e.g., top 3 items represent X% of total)
+
+4. **Anomalies & Outliers**: Flag anything unusual — unexpectedly high/low values, missing data gaps, sudden changes.
+
+5. **Variance Analysis**: If budget vs actual data is present, analyze the variance (favorable/unfavorable).
+
+6. **Actionable Insights**: Based on the data, what should leadership consider or investigate further?
+
+7. **Data Quality Notes**: Flag any data quality concerns (nulls, negative values, inconsistencies).
+
+**Format your response in clear, professional prose suitable for an executive briefing. Use precise dollar amounts and percentages. Do NOT repeat the raw data table — synthesize insights from it.**
+"""
+
+FOLLOWUP_SUGGESTIONS_PROMPT = """
+Based on the user's question and the data results, suggest 3 natural follow-up questions that would deepen their analysis.
+
+**Original Question:** {user_question}
+**Data Summary:** {data_summary}
+
+**Guidelines:**
+- Make suggestions specific and actionable (not generic)
+- Each suggestion should explore a different angle: drill-down, comparison, trend, or root-cause
+- Phrase them as natural questions the user would actually ask
+- Include the time period, metric, or dimension they should investigate
+
+**Return JSON list:**
+["question 1", "question 2", "question 3"]
+"""
+
 
 class SQLQueryAgent:
     def __init__(self, tools=None):
@@ -178,40 +304,84 @@ class SQLQueryAgent:
         labels_context = LABELS_CONTEXT.format(table_name=self.table_name)
         return f"{schema_sql}\n\n{labels_context}"
 
-    def _llm_sql_gen(self, prompt: str) -> Tuple[str, str]:
+    # ==================================================================
+    # STEP 1: Query Validation & Disambiguation
+    # ==================================================================
+
+    def validate_query(self, user_query: str) -> Dict[str, Any]:
+        """
+        Validates the user query before SQL generation.
+        Returns validation result with suggestions if the query is suboptimal.
+        """
+        try:
+            schema_hint = LABELS_CONTEXT.format(table_name=self.table_name)
+            prompt = QUERY_VALIDATION_PROMPT.format(
+                schema_hint=schema_hint,
+                user_query=user_query,
+            )
+            resp = self.tools.llm_call(prompt)
+            cleaned = resp.strip().replace("```json", "").replace("```", "")
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+            if start != -1 and end != -1:
+                return json.loads(cleaned[start:end + 1])
+        except Exception as e:
+            logger.warning(f"Query validation failed: {e}")
+
+        # Default: proceed with query as-is
+        return {
+            "is_clear": True,
+            "confidence": 0.7,
+            "issues": [],
+            "suggestions": [],
+            "clarifying_questions": [],
+            "interpreted_as": user_query,
+        }
+
+    # ==================================================================
+    # STEP 2: SQL Generation
+    # ==================================================================
+
+    def _llm_sql_gen(self, prompt: str) -> Tuple[str, str, str]:
+        """Returns (sql, explanation, chart_type)."""
         logger.info("Generating SQL with LLM...")
         try:
             resp = self.tools.llm_call(prompt)
             if not isinstance(resp, str):
-                return "", "LLM Error: Non-string response"
+                return "", "LLM Error: Non-string response", "bar"
 
             cleaned_resp = resp.strip().replace("```json", "").replace("```", "")
             resp_obj = json.loads(cleaned_resp)
-            return resp_obj.get("sql", ""), resp_obj.get("explanation", "")
-            
+            return (
+                resp_obj.get("sql", ""),
+                resp_obj.get("explanation", ""),
+                resp_obj.get("chart_type", "bar"),
+            )
+
         except json.JSONDecodeError:
             logger.error(f"Failed to parse JSON: {resp}")
-            return "", "JSON Parsing Error"
+            return "", "JSON Parsing Error", "bar"
         except Exception as e:
             logger.error(f"Error processing LLM: {e}")
-            return "", f"Error: {str(e)}"
+            return "", f"Error: {str(e)}", "bar"
 
-    def get_sql(self, query_text: str) -> Tuple[str, str]:
+    def get_sql(self, query_text: str) -> Tuple[str, str, str]:
+        """Returns (sql, explanation, chart_type)."""
         try:
             system_prompt = SQL_QUERY_PROMPT.format(table_name=self.table_name)
         except KeyError:
-            return "", "Prompt error"
+            return "", "Prompt error", "bar"
 
         schema_context = self.get_schema_context()
         relevant_context = self.schema_mapper.get_relevant_schema_context(query_text)
-        
+
         prompt = (
             f"{system_prompt}\n\n"
             f"### Schema:\n{schema_context}\n\n"
             f"### Context:\n{relevant_context}\n\n"
             f"### User Request:\n{query_text}\n"
         )
-        
+
         return self._llm_sql_gen(prompt)
 
     def fix_sql(self, sql: str, explanation: str, error_msg: str) -> str:
@@ -219,24 +389,27 @@ class SQLQueryAgent:
             prompt = SQL_QUERY_FIX_PROMPT.format(
                 sql=sql,
                 error_msg=error_msg,
-                explanation=explanation
+                explanation=explanation,
             )
-            sql, _ = self._llm_sql_gen(prompt)
+            sql, _, _ = self._llm_sql_gen(prompt)
             return sql
         except Exception as e:
             logger.error(f"Fix prompt error: {e}")
             return ""
+
+    # ==================================================================
+    # STEP 3: Execution
+    # ==================================================================
 
     def execute_query(self, sql: str) -> Any:
         if not sql:
             return None
         logger.info(f"Executing SQL: {sql}")
         try:
-            # We attempt execution
             results = OpexDB.execute_sql_query(sql, format_as_markdown=True)
             return results
         except Exception as e:
-            # CRITICAL: Attempt to rollback session to prevent 'current transaction is aborted' errors
+            # Attempt rollback
             try:
                 session_gen = get_db_session()
                 session = next(session_gen)
@@ -245,61 +418,159 @@ class SQLQueryAgent:
                     logger.info("Database session rolled back successfully.")
             except Exception as rollback_err:
                 logger.warning(f"Failed to rollback session: {rollback_err}")
-            
+
             logger.error(f"DB Error: {e}")
             raise e
 
-    def _professional_summary(self, user_input: str, explanation: str, results: Any) -> str:
-        """Generate a professional executive-level narrative for the query results."""
+    # ==================================================================
+    # STEP 4: Post-Execution Insight Analysis
+    # ==================================================================
+
+    def _deep_analysis(self, user_input: str, sql: str, explanation: str, results: Any) -> str:
+        """Generate comprehensive LLM analysis with trends, anomalies, and insights."""
         try:
-            results_preview = str(results)[:2000] if results else "No results returned."
-            prompt = (
-                "You are a Senior Financial & Resource Planning Analyst presenting findings to executives.\n\n"
-                "**Guidelines:**\n"
-                "1. Write a professional, clear summary (3-6 sentences) interpreting the data results below.\n"
-                "2. Highlight key figures, notable trends, or outliers.\n"
-                "3. Use precise financial/resource planning terminology.\n"
-                "4. If the data shows comparison metrics (budget vs actual, plan vs demand), call out the variance.\n"
-                "5. Do NOT repeat raw numbers verbatim — synthesize an insight.\n"
-                "6. End with a brief actionable observation or recommendation where appropriate.\n\n"
-                f"**Original Question:** {user_input}\n"
-                f"**Query Explanation:** {explanation}\n"
-                f"**Data Results (preview):**\n{results_preview}\n\n"
-                "**Professional Summary:**"
+            results_text = str(results)[:3000] if results else "No results returned."
+            prompt = INSIGHT_ANALYSIS_PROMPT.format(
+                user_question=user_input,
+                sql=sql,
+                explanation=explanation,
+                results=results_text,
             )
             return self.tools.llm_call(prompt)
         except Exception as e:
-            logger.warning(f"Professional summary generation failed: {e}")
+            logger.warning(f"Deep analysis generation failed: {e}")
             return explanation
 
-    def run(self, user_input: str, retry_limit: int = 3) -> Dict[str, Any]:
-        sql, explanation = self.get_sql(user_input)
-        if not sql:
-            return {"status": "error", "message": "Failed to generate SQL"}
+    def _generate_followups(self, user_input: str, results: Any) -> List[str]:
+        """Generate contextual follow-up question suggestions."""
+        try:
+            data_summary = str(results)[:1500] if results else "No data"
+            prompt = FOLLOWUP_SUGGESTIONS_PROMPT.format(
+                user_question=user_input,
+                data_summary=data_summary,
+            )
+            resp = self.tools.llm_call(prompt)
+            cleaned = resp.strip().replace("```json", "").replace("```", "")
+            start = cleaned.find("[")
+            end = cleaned.rfind("]")
+            if start != -1 and end != -1:
+                suggestions = json.loads(cleaned[start:end + 1])
+                return suggestions[:3]
+        except Exception as e:
+            logger.warning(f"Follow-up generation failed: {e}")
+        return []
 
+    def _check_data_quality(self, results: Any) -> List[str]:
+        """Quick heuristic checks on results for data quality warnings."""
+        warnings = []
+        if results is None:
+            return ["No results returned — the query may be too restrictive or the table may be empty."]
+
+        results_str = str(results)
+
+        if "None" in results_str or "null" in results_str.lower():
+            warnings.append("Some values contain NULL/None — data may be incomplete for certain records.")
+
+        if results_str.count("\n") <= 2:
+            warnings.append("Very few rows returned — consider broadening your query filters.")
+
+        if "0.00" in results_str:
+            count_zeros = results_str.count("0.00")
+            if count_zeros > 3:
+                warnings.append(f"Multiple zero values detected ({count_zeros} instances) — verify data completeness.")
+
+        # Check for negative values in financial context
+        if "-" in results_str and any(kw in results_str.lower() for kw in ["spend", "budget", "cost"]):
+            warnings.append("Negative financial values detected — this may indicate credits, reversals, or data issues.")
+
+        return warnings
+
+    # ==================================================================
+    # MAIN RUN METHOD
+    # ==================================================================
+
+    def run(self, user_input: str, retry_limit: int = 3) -> Dict[str, Any]:
+        """
+        Full pipeline:
+        1. Validate query → provide suggestions if suboptimal
+        2. Generate SQL
+        3. Execute with retry + auto-fix
+        4. Deep LLM analysis on results
+        5. Generate follow-up suggestions
+        6. Data quality checks
+        """
+
+        # Step 1: Validate
+        validation = self.validate_query(user_input)
+        logger.info(f"Validation: clear={validation.get('is_clear')}, confidence={validation.get('confidence')}")
+
+        # If query is too ambiguous and we have clarifying questions, return them
+        if (
+            not validation.get("is_clear", True)
+            and validation.get("confidence", 1.0) < 0.5
+            and validation.get("clarifying_questions")
+        ):
+            return {
+                "status": "clarification_needed",
+                "message": "I'd like to clarify your request to give you the most accurate results.",
+                "interpreted_as": validation.get("interpreted_as", ""),
+                "issues": validation.get("issues", []),
+                "clarifying_questions": validation.get("clarifying_questions", []),
+                "suggestions": validation.get("suggestions", []),
+            }
+
+        # Step 2: Generate SQL
+        sql, explanation, chart_type = self.get_sql(user_input)
+        if not sql:
+            return {
+                "status": "error",
+                "message": "I wasn't able to generate a SQL query for that request. Could you rephrase it?",
+                "suggestions": validation.get("suggestions", []),
+            }
+
+        # Step 3: Execute with retry
         current_try = 0
+        last_error = ""
         while current_try < retry_limit:
             try:
                 results = self.execute_query(sql)
 
-                # Generate professional narrative from the results
-                professional_explanation = self._professional_summary(
-                    user_input, explanation, results
-                )
+                # Step 4: Deep analysis
+                analysis = self._deep_analysis(user_input, sql, explanation, results)
+
+                # Step 5: Follow-up suggestions
+                followups = self._generate_followups(user_input, results)
+
+                # Step 6: Data quality
+                dq_warnings = self._check_data_quality(results)
 
                 return {
                     "status": "success",
                     "sql": sql,
-                    "explanation": professional_explanation,
-                    "results": results
+                    "explanation": analysis,
+                    "results": results,
+                    "chart_type": chart_type,
+                    "followup_suggestions": followups,
+                    "data_quality_warnings": dq_warnings,
+                    "query_interpretation": validation.get("interpreted_as", ""),
+                    "validation_suggestions": validation.get("suggestions", []),
                 }
             except Exception as e:
-                logger.warning(f"Attempt {current_try+1} failed: {e}")
-                sql = self.fix_sql(sql, explanation, str(e))
+                last_error = str(e)
+                logger.warning(f"Attempt {current_try + 1} failed: {e}")
+                sql = self.fix_sql(sql, explanation, last_error)
                 current_try += 1
 
         return {
             "status": "error",
-            "message": "Exceeded retry limit",
-            "last_sql": sql
+            "message": (
+                f"I tried {retry_limit} times but couldn't execute the query successfully. "
+                f"Last error: {last_error[:200]}"
+            ),
+            "last_sql": sql,
+            "suggestions": validation.get("suggestions", [
+                "Try rephrasing your question with specific column names",
+                "Specify the time period (e.g., 'in FY2025')",
+                "Mention the exact table: OpEx spend, resource demand, or project priority",
+            ]),
         }
